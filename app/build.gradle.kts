@@ -12,8 +12,8 @@ android {
         applicationId = "com.DONGFANG_WANGDAREN.PGM_Image_Viewer"
         minSdk = 33
         targetSdk = 36
-        versionCode = 26_0704_22_1
-        versionName = "26_0704_22_1.NANJING"
+        versionCode = 26_0704_22_2
+        versionName = "26_0704_22_2.NANJING"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

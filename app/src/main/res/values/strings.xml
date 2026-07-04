@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">PGM Image Viewer</string>
+    <string name="open_pgm_file">Open PGM File</string>
+    <string name="empty_state_title">No PGM file selected</string>
+    <string name="empty_state_message">Choose a .pgm file from local storage to preview it.</string>
+    <string name="viewer_hint">Pinch with two fingers to zoom. Dragging and rotation are disabled.</string>
+    <string name="toast_only_pgm">Only PGM files are supported.</string>
+    <string name="toast_open_failed">Failed to open the selected PGM file.</string>
+</resources>

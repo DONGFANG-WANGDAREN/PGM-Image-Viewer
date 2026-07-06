@@ -14,6 +14,7 @@ import androidx.appcompat.widget.AppCompatImageView;
 
 public class ViewPictureZoom extends AppCompatImageView {
 
+    private static final String TAG = "ViewPictureZoom";
     private final Matrix matrixPicture = new Matrix();
     private final ScaleGestureDetector detectorScale;
 
@@ -36,6 +37,7 @@ public class ViewPictureZoom extends AppCompatImageView {
     }
 
     public void setBitmap(@NonNull Bitmap bitmap) {
+        AppLogger.d(TAG, "Set bitmap. width=" + bitmap.getWidth() + ", height=" + bitmap.getHeight());
         setImageBitmap(bitmap);
         post(this::resetScaleToFit);
     }
@@ -73,6 +75,7 @@ public class ViewPictureZoom extends AppCompatImageView {
         scaleMinimum = Math.min(scaleX, scaleY);
         scaleMaximum = Math.max(scaleMinimum * 8.0f, 8.0f);
         scaleCurrent = scaleMinimum;
+        AppLogger.d(TAG, "Reset scale. min=" + scaleMinimum + ", max=" + scaleMaximum + ", current=" + scaleCurrent);
 
         applyMatrix();
     }
@@ -101,6 +104,7 @@ public class ViewPictureZoom extends AppCompatImageView {
         public boolean onScale(ScaleGestureDetector detector) {
             float updatedScale = scaleCurrent * detector.getScaleFactor();
             scaleCurrent = Math.max(scaleMinimum, Math.min(updatedScale, scaleMaximum));
+            AppLogger.d(TAG, "Scale gesture. factor=" + detector.getScaleFactor() + ", current=" + scaleCurrent);
             applyMatrix();
             return true;
         }

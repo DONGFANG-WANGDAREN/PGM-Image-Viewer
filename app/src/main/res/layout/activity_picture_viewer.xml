@@ -1,73 +1,303 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/slate_100"
-    android:fitsSystemWindows="true"
-    android:orientation="vertical"
-    android:padding="16dp">
+    android:fitsSystemWindows="true">
 
-    <FrameLayout
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="@android:color/black">
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="16dp">
 
-        <com.DONGFANG_WANGDAREN.PGM_Image_Viewer.ViewPictureZoom
-            android:id="@+id/view_picture_zoom"
+        <TextView
+            android:id="@+id/text_view_current_file_title"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:contentDescription="@string/app_name" />
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/current_file_default_title"
+            android:textColor="@color/slate_900"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/text_view_current_file_path"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:ellipsize="middle"
+            android:maxLines="1"
+            android:text="@string/current_file_default_path"
+            android:textColor="@color/slate_700"
+            android:textSize="13sp" />
 
         <LinearLayout
-            android:id="@+id/layout_empty_state"
+            android:id="@+id/layout_text_actions"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:padding="24dp">
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="end"
+            android:orientation="horizontal"
+            android:visibility="gone">
 
-            <TextView
-                android:id="@+id/text_view_empty_title"
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_text_zoom_out"
+                style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/empty_state_title"
-                android:textColor="@color/white"
-                android:textSize="20sp"
-                android:textStyle="bold" />
+                android:minWidth="0dp"
+                android:text="@string/text_zoom_out"
+                android:visibility="gone" />
 
-            <TextView
-                android:id="@+id/text_view_empty_message"
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_text_zoom_in"
+                style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:minWidth="0dp"
+                android:text="@string/text_zoom_in"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_pretty_print"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:text="@string/text_pretty_print"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_toggle_markdown_preview"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:text="@string/markdown_preview"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/layout_text_search"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <EditText
+                android:id="@+id/edit_text_search"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:backgroundTint="@color/blue_500"
+                android:hint="@string/search_hint"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:maxLines="1"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:textColor="@color/slate_900"
+                android:textColorHint="@color/slate_700" />
+
+            <TextView
+                android:id="@+id/text_view_search_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:text="@string/search_no_result"
+                android:textColor="@color/slate_700"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_search_previous"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:minWidth="0dp"
+                android:text="@string/search_previous" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_search_next"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:text="@string/search_next" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="12dp"
+            android:layout_weight="1"
+            android:background="@android:color/black">
+
+            <com.DONGFANG_WANGDAREN.PGM_Image_Viewer.ViewPictureZoom
+                android:id="@+id/view_picture_zoom"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/app_name" />
+
+            <ScrollView
+                android:id="@+id/scroll_view_text"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:fillViewport="true"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/text_view_file_content"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:padding="16dp"
+                    android:textColor="@color/white"
+                    android:textIsSelectable="true"
+                    android:textSize="14sp"
+                    android:typeface="monospace" />
+            </ScrollView>
+
+            <WebView
+                android:id="@+id/web_view_markdown_preview"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@android:color/white"
+                android:visibility="gone" />
+
+            <androidx.media3.ui.PlayerView
+                android:id="@+id/player_view_file"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@android:color/black"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/layout_empty_state"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
                 android:gravity="center"
-                android:text="@string/empty_state_message"
+                android:orientation="vertical"
+                android:padding="24dp">
+
+                <TextView
+                    android:id="@+id/text_view_empty_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/empty_state_title"
+                    android:textColor="@color/white"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/text_view_empty_message"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:text="@string/empty_state_message"
+                    android:textColor="@color/slate_200"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/text_view_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/viewer_hint"
+            android:textColor="@color/slate_700"
+            android:textSize="14sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_open_pgm"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:text="@string/open_supported_file"
+                android:textColor="@color/white"
+                app:backgroundTint="@color/green_600"
+                app:cornerRadius="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_toggle_history"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="@string/show_history"
+                app:cornerRadius="12dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/layout_history_panel"
+        android:layout_width="280dp"
+        android:layout_height="match_parent"
+        android:background="@color/slate_900"
+        android:elevation="10dp"
+        android:gravity="top"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/history_title"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/history_subtitle"
+            android:textColor="@color/slate_200"
+            android:textSize="12sp" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="12dp"
+            android:layout_weight="1">
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:fillViewport="true">
+
+                <LinearLayout
+                    android:id="@+id/layout_history_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </ScrollView>
+
+            <TextView
+                android:id="@+id/text_view_history_empty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:text="@string/history_empty"
                 android:textColor="@color/slate_200"
                 android:textSize="14sp" />
-        </LinearLayout>
-    </FrameLayout>
+        </FrameLayout>
+    </LinearLayout>
 
-    <TextView
-        android:id="@+id/text_view_hint"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:text="@string/viewer_hint"
-        android:textColor="@color/slate_700"
-        android:textSize="14sp" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/button_open_pgm"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="20dp"
-        android:layout_marginTop="12dp"
-        android:layout_marginEnd="20dp"
-        android:text="@string/open_pgm_file"
-        android:textColor="@color/white"
-        app:backgroundTint="@color/green_600"
-        app:cornerRadius="12dp" />
-
-</LinearLayout>
+</FrameLayout>

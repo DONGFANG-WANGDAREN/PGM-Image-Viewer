@@ -34,6 +34,11 @@ android {
 dependencies {
     implementation(libs.appcompat)
     implementation(libs.material)
+    implementation(libs.commonmark)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
+    implementation(libs.jxl)
+    implementation(libs.pdf.viewer)
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)

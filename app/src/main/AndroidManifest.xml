@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application
+        android:name=".AppPgmImageViewer"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -17,6 +18,154 @@
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="content"
+                    android:mimeType="text/plain"
+                    android:pathSuffix=".txt" />
+                <data
+                    android:scheme="file"
+                    android:mimeType="text/plain"
+                    android:pathSuffix=".txt" />
+                <data android:scheme="content" android:pathSuffix=".txt" />
+                <data android:scheme="file" android:pathSuffix=".txt" />
+                <data
+                    android:scheme="content"
+                    android:mimeType="application/yaml"
+                    android:pathSuffix=".yaml" />
+                <data
+                    android:scheme="file"
+                    android:mimeType="application/yaml"
+                    android:pathSuffix=".yaml" />
+                <data
+                    android:scheme="content"
+                    android:mimeType="application/x-yaml"
+                    android:pathSuffix=".yaml" />
+                <data
+                    android:scheme="file"
+                    android:mimeType="application/x-yaml"
+                    android:pathSuffix=".yaml" />
+                <data
+                    android:scheme="content"
+                    android:mimeType="text/yaml"
+                    android:pathSuffix=".yaml" />
+                <data
+                    android:scheme="file"
+                    android:mimeType="text/yaml"
+                    android:pathSuffix=".yaml" />
+                <data
+                    android:scheme="content"
+                    android:mimeType="text/x-yaml"
+                    android:pathSuffix=".yaml" />
+                <data
+                    android:scheme="file"
+                    android:mimeType="text/x-yaml"
+                    android:pathSuffix=".yaml" />
+                <data android:scheme="content" android:pathSuffix=".yaml" />
+                <data android:scheme="file" android:pathSuffix=".yaml" />
+                <data
+                    android:scheme="content"
+                    android:mimeType="application/yaml"
+                    android:pathSuffix=".yml" />
+                <data
+                    android:scheme="file"
+                    android:mimeType="application/yaml"
+                    android:pathSuffix=".yml" />
+                <data
+                    android:scheme="content"
+                    android:mimeType="application/x-yaml"
+                    android:pathSuffix=".yml" />
+                <data
+                    android:scheme="file"
+                    android:mimeType="application/x-yaml"
+                    android:pathSuffix=".yml" />
+                <data
+                    android:scheme="content"
+                    android:mimeType="text/yaml"
+                    android:pathSuffix=".yml" />
+                <data
+                    android:scheme="file"
+                    android:mimeType="text/yaml"
+                    android:pathSuffix=".yml" />
+                <data
+                    android:scheme="content"
+                    android:mimeType="text/x-yaml"
+                    android:pathSuffix=".yml" />
+                <data
+                    android:scheme="file"
+                    android:mimeType="text/x-yaml"
+                    android:pathSuffix=".yml" />
+                <data android:scheme="content" android:pathSuffix=".yml" />
+                <data android:scheme="file" android:pathSuffix=".yml" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="content" android:mimeType="text/plain" />
+                <data android:scheme="file" android:mimeType="text/plain" />
+                <data android:scheme="content" android:mimeType="application/yaml" />
+                <data android:scheme="file" android:mimeType="application/yaml" />
+                <data android:scheme="content" android:mimeType="application/x-yaml" />
+                <data android:scheme="file" android:mimeType="application/x-yaml" />
+                <data android:scheme="content" android:mimeType="text/yaml" />
+                <data android:scheme="file" android:mimeType="text/yaml" />
+                <data android:scheme="content" android:mimeType="text/x-yaml" />
+                <data android:scheme="file" android:mimeType="text/x-yaml" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="content" android:mimeType="*/*" />
+                <data android:scheme="file" android:mimeType="*/*" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="content"
+                    android:mimeType="image/x-portable-graymap"
+                    android:pathSuffix=".pgm" />
+                <data
+                    android:scheme="file"
+                    android:mimeType="image/x-portable-graymap"
+                    android:pathSuffix=".pgm" />
+                <data
+                    android:scheme="content"
+                    android:mimeType="application/x-portable-graymap"
+                    android:pathSuffix=".pgm" />
+                <data
+                    android:scheme="file"
+                    android:mimeType="application/x-portable-graymap"
+                    android:pathSuffix=".pgm" />
+                <data
+                    android:scheme="content"
+                    android:mimeType="image/x-portable-anymap"
+                    android:pathSuffix=".pgm" />
+                <data
+                    android:scheme="file"
+                    android:mimeType="image/x-portable-anymap"
+                    android:pathSuffix=".pgm" />
+                <data android:scheme="content" android:pathSuffix=".pgm" />
+                <data android:scheme="file" android:pathSuffix=".pgm" />
             </intent-filter>
         </activity>
     </application>

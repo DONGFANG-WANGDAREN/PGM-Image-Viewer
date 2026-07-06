@@ -9,6 +9,8 @@ import java.io.InputStream;
 
 public final class ParserPicturePgm {
 
+    private static final String TAG = "ParserPicturePgm";
+
     private ParserPicturePgm() {
     }
 
@@ -39,6 +41,7 @@ public final class ParserPicturePgm {
                 ? parseAsciiPixels(bufferedInputStream, pixelCount, maxValue)
                 : parseBinaryPixels(bufferedInputStream, pixelCount, maxValue);
 
+        AppLogger.i(TAG, "PGM parsed. magic=" + magicNumber + ", width=" + width + ", height=" + height + ", maxValue=" + maxValue);
         return new DataPicturePgm(width, height, argbPixels);
     }
 

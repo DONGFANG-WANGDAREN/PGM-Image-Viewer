@@ -1,25 +1,51 @@
-# PGM Image Viewer
+# Reader RX
 
-An Android app that selects and opens many common file types from local storage.
+`Reader RX` is an Android local file reader built to open a wide range of common file types from one place.
 
-- PGM files open in-app and support pinch zoom.
-- Common image files such as `.jpg`, `.jpeg`, `.png`, `.bmp`, `.gif`, `.webp`, `.heic`, and `.heif` open in-app.
-- Text-like files such as `.txt`, `.json`, `.xml`, `.yaml`, `.yml`, `.java`, `.swift`, `.kt`, `.md`, `.csv`, `.log`, `.properties`, `.gradle`, `.html`, `.css`, and `.js` open in-app as plain text.
-- `.docx` files are read in-app with Apache POI and shown as extracted text content.
-- If a provider gives an incorrect MIME type for a `.docx` file, the app also probes the file content and still tries to open it as DOCX text.
-- Common video files such as `.mp4`, `.m4v`, `.mov`, `.mkv`, `.webm`, `.avi`, `.3gp`, `.mpeg`, and `.mpg` play in-app.
-- PDF, Word, Excel, PowerPoint, and similar document files are forwarded to an available external viewer app on the device.
-- If no suitable external app exists for a file type, the app shows the toast message `No app is available to open this file type.`.
-- Heavy in-app parsing now runs on a background thread so multi-megabyte files do not block the UI thread while opening.
-- Very large text and DOCX previews are truncated in-app to keep the page responsive.
-- The app creates a root-level folder using the app name, then writes logs under `<AppName>/log/YYYY-MM-DD/HH-mm__YYYY-MM-DD.txt`.
-- Recent file history is also persisted under `<AppName>/history/history-records.json`.
-- Root-level writing depends on Android all-files access. If that permission is not granted, the app temporarily falls back to an app-private directory instead.
-- Code-like text files such as JSON, XML, Java, Swift, JS, TS, YAML, and Markdown now use in-app syntax coloring for a cleaner source view.
-- Markdown files also provide a preview toggle so users can switch between raw source and rendered preview.
-- The top title area shows the currently displayed file name and its location path.
-- When a text-like file is open, a search bar appears above the preview area with previous/next match navigation and highlight.
-- A history panel can be shown or hidden from the bottom button. The panel is attached to the outermost layer of the screen and overlays the page without shrinking the main file display.
-- The history list keeps file name and path records so the user can reopen files quickly.
-- Tapping a history entry hides the history panel immediately before reopening the selected file.
-- If a file in history has been deleted, the record is kept first and the app asks whether to remove that history entry.
+It can open files from the in-app picker and also receive system `VIEW` intents as an "Open with" target.
+
+## Core Features
+
+- Opens local files from the system file picker.
+- Handles system "Open with" requests for supported file types.
+- Searches text content with match highlighting and previous/next navigation.
+- Switches Markdown files between source view and rendered preview.
+- Pretty-prints JSON and XML files.
+- Applies basic syntax highlighting to code-like text files.
+- Views images and PGM files in-app with zoom support.
+- Plays video and audio files in-app.
+- Opens PDF, DOCX, and Excel files in-app, with the option to use a system app when available.
+- Prompts before opening APK files in the system installer.
+- Saves recent files so they can be reopened quickly from the history panel.
+- Opens large files on a background thread to keep the UI responsive.
+
+## Supported Formats
+
+### Opened In-App
+
+- PGM: `.pgm`
+- Images: `.jpg` `.jpeg` `.png` `.bmp` `.webp` `.gif` `.heic` `.heif`
+- Text: `.txt` `.json` `.xml` `.yaml` `.yml` `.java` `.swift` `.kt` `.kts` `.md` `.markdown` `.csv` `.log` `.ini` `.cfg` `.conf` `.properties` `.gradle` `.css` `.js` `.ts` `.html` `.htm`
+- Word documents: `.docx`
+- Excel spreadsheets: `.xls` `.xlsx`
+- Video: `.mp4` `.m4v` `.mov` `.mkv` `.webm` `.avi` `.3gp` `.mpeg` `.mpg`
+- Audio: `.mp3` `.wav` `.flac` `.m4a` `.aac` `.ogg` `.opus` `.amr` `.wma`
+- PDF: `.pdf`
+
+### Opened With External Apps
+
+- Documents: `.doc` `.ppt` `.pptx` `.wps` `.odt` `.ods` `.odp` `.rtf`
+
+### Install Or Block
+
+- Opens the system installer: `.apk`
+- Blocked from direct opening: `.ipa` `.exe` `.msi` `.dmg` `.pkg` `.deb` `.rpm`
+
+## Reading Features
+
+- Shows live match counts while searching text.
+- Supports previous and next search navigation.
+- Renders Markdown preview in-app.
+- Toggles JSON and XML between raw text and pretty-printed output.
+- Adjusts text size for easier reading.
+- Truncates oversized text, DOCX, and Excel previews to keep the viewer responsive.

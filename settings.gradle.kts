@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PGM Image Viewer"
+rootProject.name = "Reader RX"
 include(":app")

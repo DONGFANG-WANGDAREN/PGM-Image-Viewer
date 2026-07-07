@@ -1,4 +1,4 @@
-package com.DONGFANG_WANGDAREN.PGM_Image_Viewer;
+package com.DONGFANG_WANGDAREN.Reader_RX;
 
 import android.content.Context;
 
@@ -21,6 +21,6 @@ public class ExampleInstrumentedTest {
     public void useAppContext() {
         // Context of the app under test.
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        assertEquals("com.DONGFANG_WANGDAREN.PGM_Image_Viewer", appContext.getPackageName());
+        assertEquals("com.DONGFANG_WANGDAREN.Reader_RX", appContext.getPackageName());
     }
 }

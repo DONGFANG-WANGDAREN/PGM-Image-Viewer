@@ -1,4 +1,4 @@
-package com.DONGFANG_WANGDAREN.PGM_Image_Viewer;
+package com.DONGFANG_WANGDAREN.Reader_RX;
 
 import android.content.ActivityNotFoundException;
 import android.content.Intent;

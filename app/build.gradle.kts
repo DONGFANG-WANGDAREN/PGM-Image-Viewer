@@ -3,13 +3,13 @@ plugins {
 }
 
 android {
-    namespace = "com.DONGFANG_WANGDAREN.PGM_Image_Viewer"
+    namespace = "com.DONGFANG_WANGDAREN.Reader_RX"
     compileSdk {
         version = release(36)
     }
 
     defaultConfig {
-        applicationId = "com.DONGFANG_WANGDAREN.PGM_Image_Viewer"
+        applicationId = "com.DONGFANG_WANGDAREN.Reader_RX"
         minSdk = 33
         targetSdk = 36
         versionCode = 26_0704_22_2

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">PGM Image Viewer</string>
+    <string name="app_name">Reader RX</string>
     <string name="open_supported_file">打开文件</string>
     <string name="empty_state_title">还没有打开文件</string>
     <string name="empty_state_message">请选择一个本地文件进行查看。</string>

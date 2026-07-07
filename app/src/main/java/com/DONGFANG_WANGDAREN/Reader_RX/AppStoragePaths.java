@@ -1,4 +1,4 @@
-package com.DONGFANG_WANGDAREN.PGM_Image_Viewer;
+package com.DONGFANG_WANGDAREN.Reader_RX;
 
 import android.content.Context;
 import android.os.Build;
@@ -76,9 +76,9 @@ public final class AppStoragePaths {
     @NonNull
     private static String buildAppFolderName(@NonNull Context context) {
         CharSequence applicationLabel = context.getApplicationInfo().loadLabel(context.getPackageManager());
-        String normalized = applicationLabel == null ? "PGM Image Viewer" : applicationLabel.toString().trim();
+        String normalized = applicationLabel == null ? "Reader RX" : applicationLabel.toString().trim();
         if (normalized.isEmpty()) {
-            normalized = "PGM Image Viewer";
+            normalized = "Reader RX";
         }
         return normalized.replace("/", "_");
     }

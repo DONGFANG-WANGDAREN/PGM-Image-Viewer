@@ -138,7 +138,7 @@
             android:layout_weight="1"
             android:background="@android:color/black">
 
-            <com.DONGFANG_WANGDAREN.PGM_Image_Viewer.ViewPictureZoom
+            <com.DONGFANG_WANGDAREN.Reader_RX.ViewPictureZoom
                 android:id="@+id/view_picture_zoom"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"

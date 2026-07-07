@@ -1,4 +1,4 @@
-package com.DONGFANG_WANGDAREN.PGM_Image_Viewer;
+package com.DONGFANG_WANGDAREN.Reader_RX;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;

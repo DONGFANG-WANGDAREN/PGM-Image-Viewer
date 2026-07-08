@@ -49,6 +49,14 @@ public final class ReaderTableExcel {
     }
 
     @NonNull
+    public static ReaderTextPlain.PreviewTextResult readAll(
+            @NonNull InputStream inputStream,
+            @NonNull String fileName
+    ) throws IOException {
+        return readPreview(inputStream, fileName, Integer.MAX_VALUE);
+    }
+
+    @NonNull
     private static ReaderTextPlain.PreviewTextResult readXlsPreview(
             @NonNull InputStream inputStream,
             int maxCharacters

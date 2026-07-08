@@ -9,9 +9,12 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
+import android.provider.Settings;
 import android.text.Editable;
 import android.text.Layout;
 import android.text.Spannable;
@@ -26,6 +29,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.SeekBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -53,17 +57,22 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.text.SimpleDateFormat;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
@@ -95,14 +104,16 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private static final String JSON_KEY_FILE_NAME = "file_name";
     private static final String JSON_KEY_FILE_PATH = "file_path";
     private static final int MAX_HISTORY_RECORDS = 20;
-    private static final int MAX_TEXT_PREVIEW_CHARACTERS = 300_000;
-    private static final int MAX_DOCX_PREVIEW_CHARACTERS = 300_000;
+    private static final int TEXT_QUICK_SCROLL_MAX = 1000;
     private static final float DEFAULT_TEXT_SIZE_SP = 14f;
     private static final float MIN_TEXT_SIZE_SP = 10f;
     private static final float MAX_TEXT_SIZE_SP = 30f;
 
     private ActivityResultLauncher<String[]> launcherOpenDocument;
+    private ActivityResultLauncher<Uri> launcherOpenDocumentTree;
+    private ActivityResultLauncher<Intent> launcherManageAllFilesAccess;
     private MaterialButton buttonOpenPgm;
+    private MaterialButton buttonConvertPmg;
     private ViewPictureZoom viewPictureZoom;
     private View layoutTextSearch;
     private EditText editTextSearch;
@@ -115,7 +126,10 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private MaterialButton buttonTextZoomIn;
     private MaterialButton buttonTextZoomOut;
     private ScrollView scrollViewText;
+    private View layoutTextQuickScroll;
+    private ViewSeekBarVertical seekBarTextQuickScroll;
     private TextView textViewFileContent;
+    private TextView textViewTextScrollPosition;
     private WebView webViewMarkdownPreview;
     private PlayerView playerViewFile;
     private LinearLayout layoutEmptyState;
@@ -139,10 +153,20 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private int currentSearchIndex = -1;
     private int currentOpenRequestId = 0;
     private String currentFileName = "";
+    @Nullable
+    private Uri currentOpenedFileUri;
+    @Nullable
+    private Uri pendingPmgSourceUri;
+    @Nullable
+    private String pendingPmgOutputFileName;
+    private String currentOpenMode = OPEN_MODE_UNSUPPORTED;
     private boolean currentFileIsMarkdown;
     private boolean currentTextSupportsPrettyPrint;
     private boolean currentTextPrettyPrinted;
     private boolean markdownPreviewMode;
+    private boolean convertingPmg;
+    private boolean updatingTextQuickScrollFromCode;
+    private boolean startupIntentHandled;
     private float currentTextSizeSp = DEFAULT_TEXT_SIZE_SP;
 
     @Override
@@ -157,12 +181,42 @@ public class ActivityPictureViewer extends AppCompatActivity {
                     if (uri == null) {
                         return;
                     }
-                    tryTakePersistableReadPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    tryTakePersistableReadPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    );
                     handleSelectedFile(uri, null, null, true, false);
+                }
+        );
+        launcherOpenDocumentTree = registerForActivityResult(
+                new ActivityResultContracts.OpenDocumentTree(),
+                uri -> {
+                    if (uri == null) {
+                        clearPendingPmgFolderRequest();
+                        showToast(R.string.toast_convert_pmg_failed);
+                        return;
+                    }
+                    tryTakePersistableReadPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    );
+                    continuePendingPmgSaveWithTreeUri(uri);
+                }
+        );
+        launcherManageAllFilesAccess = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (hasAllFilesAccessPermission()) {
+                        continueStartupAfterStoragePermission();
+                        return;
+                    }
+                    showToast(R.string.toast_storage_permission_denied);
+                    finish();
                 }
         );
 
         buttonOpenPgm = findViewById(R.id.button_open_pgm);
+        buttonConvertPmg = findViewById(R.id.button_convert_pmg);
         viewPictureZoom = findViewById(R.id.view_picture_zoom);
         layoutTextSearch = findViewById(R.id.layout_text_search);
         editTextSearch = findViewById(R.id.edit_text_search);
@@ -175,7 +229,10 @@ public class ActivityPictureViewer extends AppCompatActivity {
         buttonTextZoomIn = findViewById(R.id.button_text_zoom_in);
         buttonTextZoomOut = findViewById(R.id.button_text_zoom_out);
         scrollViewText = findViewById(R.id.scroll_view_text);
+        layoutTextQuickScroll = findViewById(R.id.layout_text_quick_scroll);
+        seekBarTextQuickScroll = findViewById(R.id.seek_bar_text_quick_scroll);
         textViewFileContent = findViewById(R.id.text_view_file_content);
+        textViewTextScrollPosition = findViewById(R.id.text_view_text_scroll_position);
         webViewMarkdownPreview = findViewById(R.id.web_view_markdown_preview);
         playerViewFile = findViewById(R.id.player_view_file);
         layoutEmptyState = findViewById(R.id.layout_empty_state);
@@ -202,6 +259,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         playerViewFile.setShowRewindButton(true);
 
         buttonOpenPgm.setOnClickListener(view -> launcherOpenDocument.launch(new String[]{"*/*"}));
+        buttonConvertPmg.setOnClickListener(view -> convertCurrentPgmToPmgFile());
         buttonToggleHistory.setOnClickListener(view -> setHistoryPanelVisible(layoutHistoryPanel.getVisibility() != View.VISIBLE));
         buttonSearchPrevious.setOnClickListener(view -> moveToSearchMatch(-1));
         buttonSearchNext.setOnClickListener(view -> moveToSearchMatch(1));
@@ -212,6 +270,25 @@ public class ActivityPictureViewer extends AppCompatActivity {
         buttonPrettyPrint.setOnClickListener(view -> togglePrettyPrint());
         buttonTextZoomIn.setOnClickListener(view -> adjustTextSize(2f));
         buttonTextZoomOut.setOnClickListener(view -> adjustTextSize(-2f));
+        scrollViewText.setOnScrollChangeListener((view, scrollX, scrollY, oldScrollX, oldScrollY) -> updateTextQuickScrollState());
+        seekBarTextQuickScroll.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (!fromUser || updatingTextQuickScrollFromCode) {
+                    return;
+                }
+                scrollTextToQuickScrollProgress(progress);
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                updateTextQuickScrollState();
+            }
+        });
         editTextSearch.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
@@ -232,7 +309,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         updateCurrentFileInfo(null, null);
         setHistoryPanelVisible(false);
         setTextSearchVisible(false);
-        handleIncomingIntent(getIntent());
+        requestAllFilesAccessPermissionIfNeeded();
     }
 
     @Override
@@ -240,7 +317,16 @@ public class ActivityPictureViewer extends AppCompatActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         AppLogger.i(TAG, "onNewIntent. action=" + String.valueOf(intent.getAction()));
-        handleIncomingIntent(intent);
+        startupIntentHandled = false;
+        requestAllFilesAccessPermissionIfNeeded();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (hasAllFilesAccessPermission() && !startupIntentHandled) {
+            continueStartupAfterStoragePermission();
+        }
     }
 
     private void handleIncomingIntent(@Nullable Intent intent) {
@@ -254,6 +340,45 @@ public class ActivityPictureViewer extends AppCompatActivity {
         AppLogger.i(TAG, "Handle VIEW intent. uri=" + uri);
         tryTakePersistableReadPermission(uri, intent.getFlags());
         handleSelectedFile(uri, null, null, true, false);
+    }
+
+    private void requestAllFilesAccessPermissionIfNeeded() {
+        if (hasAllFilesAccessPermission()) {
+            continueStartupAfterStoragePermission();
+            return;
+        }
+        showToast(R.string.toast_storage_permission_required);
+        launcherManageAllFilesAccess.launch(buildManageAllFilesAccessIntent());
+    }
+
+    private void continueStartupAfterStoragePermission() {
+        if (startupIntentHandled) {
+            return;
+        }
+        startupIntentHandled = true;
+        handleIncomingIntent(getIntent());
+    }
+
+    private boolean hasAllFilesAccessPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return true;
+        }
+        return Environment.isExternalStorageManager();
+    }
+
+    @NonNull
+    private Intent buildManageAllFilesAccessIntent() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return new Intent();
+        }
+        Intent appSpecificIntent = new Intent(
+                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                Uri.parse("package:" + getPackageName())
+        );
+        if (appSpecificIntent.resolveActivity(getPackageManager()) != null) {
+            return appSpecificIntent;
+        }
+        return new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
     }
 
     private void handleSelectedFile(
@@ -295,6 +420,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         try {
             verifyFileExists(uri);
             if (OPEN_MODE_INSTALLER_APK.equals(openMode)) {
+                updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
                 updateCurrentFileInfo(fileName, filePath);
                 if (saveToHistory) {
                     recordHistory(uri.toString(), fileName, filePath);
@@ -303,6 +429,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
                 return;
             }
             if (OPEN_MODE_INSTALLER_BLOCKED.equals(openMode)) {
+                updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
                 showToast(R.string.toast_installer_unsupported);
                 return;
             }
@@ -319,6 +446,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
                     showToast(R.string.toast_no_external_viewer);
                     return;
                 }
+                updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
                 updateCurrentFileInfo(fileName, filePath);
                 if (saveToHistory) {
                     recordHistory(uri.toString(), fileName, filePath);
@@ -364,6 +492,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
                                 CacheStrategy.MAXIMIZE_PERFORMANCE
                         )
                 );
+                updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
                 updateCurrentFileInfo(fileName, filePath);
                 if (saveToHistory) {
                     recordHistory(uri.toString(), fileName, filePath);
@@ -396,6 +525,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
                         showToast(R.string.toast_no_external_viewer);
                         return;
                     }
+                    updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
                     updateCurrentFileInfo(fileName, filePath);
                     if (saveToHistory) {
                         recordHistory(uri.toString(), fileName, filePath);
@@ -411,6 +541,240 @@ public class ActivityPictureViewer extends AppCompatActivity {
                 .setPositiveButton(R.string.dialog_yes, (dialog, which) -> launchApkInstaller(uri))
                 .setNegativeButton(R.string.dialog_no, null)
                 .show();
+    }
+
+    private void convertCurrentPgmToPmgFile() {
+        Uri sourceUri = currentOpenedFileUri;
+        if (!OPEN_MODE_PGM.equals(currentOpenMode) || sourceUri == null || convertingPmg) {
+            return;
+        }
+        String outputFileName = buildPmgOutputFileName(currentFileName);
+        convertingPmg = true;
+        updateConvertPmgButton();
+        executorOpenFile.execute(() -> {
+            try {
+                savePmgIntoSourceFolder(sourceUri, outputFileName);
+                runOnUiThread(() -> {
+                    convertingPmg = false;
+                    updateConvertPmgButton();
+                    showToast(getString(R.string.toast_convert_pmg_success, outputFileName));
+                });
+            } catch (SecurityException exception) {
+                AppLogger.e(TAG, "Folder write permission unavailable for PMG export. uri=" + sourceUri, exception);
+                runOnUiThread(() -> requestPmgFolderAccess(sourceUri, outputFileName));
+            } catch (IOException | IllegalArgumentException exception) {
+                AppLogger.e(TAG, "Failed to convert PGM to PMG. uri=" + sourceUri, exception);
+                runOnUiThread(() -> {
+                    convertingPmg = false;
+                    updateConvertPmgButton();
+                    showToast(R.string.toast_convert_pmg_failed);
+                });
+            }
+        });
+    }
+
+    private void savePmgIntoSourceFolder(@NonNull Uri sourceUri, @NonNull String outputFileName) throws IOException {
+        File sourceFile = tryResolveWritableSourceFile(sourceUri);
+        if (sourceFile != null) {
+            File parentDirectory = sourceFile.getParentFile();
+            if (parentDirectory == null) {
+                throw new IOException("Source parent directory not found.");
+            }
+            File outputFile = new File(parentDirectory, outputFileName);
+            try (InputStream inputStream = getContentResolver().openInputStream(sourceUri);
+                 OutputStream outputStream = new BufferedOutputStream(new FileOutputStream(outputFile))) {
+                if (inputStream == null) {
+                    throw new FileNotFoundException("Input stream is null.");
+                }
+                writePmgFile(inputStream, outputStream);
+            }
+            return;
+        }
+
+        if (!DocumentsContract.isDocumentUri(this, sourceUri)) {
+            throw new IOException("Unsupported source folder.");
+        }
+
+        String authority = sourceUri.getAuthority();
+        if (isNullOrEmpty(authority)) {
+            throw new IOException("Missing document authority.");
+        }
+        String documentId = DocumentsContract.getDocumentId(sourceUri);
+        String parentDocumentId = resolveParentDocumentId(documentId);
+        Uri parentDocumentUri = DocumentsContract.buildDocumentUri(authority, parentDocumentId);
+        Uri outputUri = DocumentsContract.createDocument(
+                getContentResolver(),
+                parentDocumentUri,
+                "image/x-portable-graymap",
+                outputFileName
+        );
+        if (outputUri == null) {
+            throw new IOException("Failed to create PMG document.");
+        }
+        try (InputStream inputStream = getContentResolver().openInputStream(sourceUri);
+             OutputStream outputStream = getContentResolver().openOutputStream(outputUri, "w")) {
+            if (inputStream == null || outputStream == null) {
+                throw new IOException("Failed to open document stream.");
+            }
+            writePmgFile(inputStream, outputStream);
+        }
+    }
+
+    @Nullable
+    private File tryResolveWritableSourceFile(@NonNull Uri sourceUri) {
+        if ("file".equalsIgnoreCase(sourceUri.getScheme()) && !isNullOrEmpty(sourceUri.getPath())) {
+            return new File(sourceUri.getPath());
+        }
+        if (!DocumentsContract.isDocumentUri(this, sourceUri)) {
+            return null;
+        }
+        String authority = sourceUri.getAuthority();
+        if (!"com.android.externalstorage.documents".equals(authority)) {
+            return null;
+        }
+        String decodedDocumentId = Uri.decode(DocumentsContract.getDocumentId(sourceUri));
+        if (decodedDocumentId.startsWith("raw:")) {
+            return new File(decodedDocumentId.substring(4));
+        }
+        int separatorIndex = decodedDocumentId.indexOf(':');
+        if (separatorIndex < 0) {
+            return null;
+        }
+        String volumeName = decodedDocumentId.substring(0, separatorIndex);
+        String relativePath = decodedDocumentId.substring(separatorIndex + 1);
+        if (!"primary".equalsIgnoreCase(volumeName)) {
+            return null;
+        }
+        return new File(Environment.getExternalStorageDirectory(), relativePath);
+    }
+
+    private void requestPmgFolderAccess(@NonNull Uri sourceUri, @NonNull String outputFileName) {
+        pendingPmgSourceUri = sourceUri;
+        pendingPmgOutputFileName = outputFileName;
+        convertingPmg = false;
+        updateConvertPmgButton();
+        showToast(R.string.toast_convert_pmg_select_folder);
+        Uri initialUri = buildInitialPmgFolderUri(sourceUri);
+        launcherOpenDocumentTree.launch(initialUri);
+    }
+
+    @Nullable
+    private Uri buildInitialPmgFolderUri(@NonNull Uri sourceUri) {
+        if (!DocumentsContract.isDocumentUri(this, sourceUri)) {
+            return null;
+        }
+        String authority = sourceUri.getAuthority();
+        if (isNullOrEmpty(authority)) {
+            return null;
+        }
+        String parentDocumentId = resolveParentDocumentId(DocumentsContract.getDocumentId(sourceUri));
+        return DocumentsContract.buildDocumentUri(authority, parentDocumentId);
+    }
+
+    private void continuePendingPmgSaveWithTreeUri(@NonNull Uri treeUri) {
+        Uri sourceUri = pendingPmgSourceUri;
+        String outputFileName = pendingPmgOutputFileName;
+        clearPendingPmgFolderRequest();
+        if (sourceUri == null || isNullOrEmpty(outputFileName)) {
+            showToast(R.string.toast_convert_pmg_failed);
+            return;
+        }
+        convertingPmg = true;
+        updateConvertPmgButton();
+        executorOpenFile.execute(() -> {
+            try {
+                savePmgIntoPickedTreeFolder(treeUri, sourceUri, outputFileName);
+                runOnUiThread(() -> {
+                    convertingPmg = false;
+                    updateConvertPmgButton();
+                    showToast(getString(R.string.toast_convert_pmg_success, outputFileName));
+                });
+            } catch (IOException | SecurityException | IllegalArgumentException exception) {
+                AppLogger.e(TAG, "Failed to export PMG after folder grant. treeUri=" + treeUri + ", sourceUri=" + sourceUri, exception);
+                runOnUiThread(() -> {
+                    convertingPmg = false;
+                    updateConvertPmgButton();
+                    showToast(R.string.toast_convert_pmg_failed);
+                });
+            }
+        });
+    }
+
+    private void savePmgIntoPickedTreeFolder(@NonNull Uri treeUri, @NonNull Uri sourceUri, @NonNull String outputFileName) throws IOException {
+        String treeDocumentId = DocumentsContract.getTreeDocumentId(treeUri);
+        Uri targetDirectoryUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, treeDocumentId);
+        Uri outputDocumentUri = DocumentsContract.createDocument(
+                getContentResolver(),
+                targetDirectoryUri,
+                "image/x-portable-graymap",
+                outputFileName
+        );
+        if (outputDocumentUri == null) {
+            throw new IOException("Failed to create target PMG file.");
+        }
+        try (InputStream inputStream = getContentResolver().openInputStream(sourceUri);
+             OutputStream outputStream = getContentResolver().openOutputStream(outputDocumentUri, "w")) {
+            if (inputStream == null || outputStream == null) {
+                throw new IOException("Failed to open PMG export stream.");
+            }
+            writePmgFile(inputStream, outputStream);
+        }
+    }
+
+    private void clearPendingPmgFolderRequest() {
+        pendingPmgSourceUri = null;
+        pendingPmgOutputFileName = null;
+    }
+
+    private void writePmgFile(@NonNull InputStream inputStream, @NonNull OutputStream outputStream) throws IOException {
+        ParserPicturePgm.DataPicturePgm dataPicturePgm = ParserPicturePgm.parse(inputStream);
+        String header = "P5\n"
+                + dataPicturePgm.getWidth()
+                + " "
+                + dataPicturePgm.getHeight()
+                + "\n255\n";
+        outputStream.write(header.getBytes(StandardCharsets.US_ASCII));
+        int[] argbPixels = dataPicturePgm.getArgbPixels();
+        for (int argbPixel : argbPixels) {
+            outputStream.write(argbPixel & 0xFF);
+        }
+        outputStream.flush();
+    }
+
+    @NonNull
+    static String buildPmgOutputFileName(@Nullable String originalFileName) {
+        String normalizedFileName = isNullOrEmpty(originalFileName) ? "image" : originalFileName;
+        String baseName = removeExtension(normalizedFileName);
+        String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
+        return baseName + "_" + timestamp + ".pmg";
+    }
+
+    @NonNull
+    private static String resolveParentDocumentId(@NonNull String documentId) {
+        int storageSeparatorIndex = documentId.indexOf(':');
+        if (storageSeparatorIndex >= 0) {
+            String storagePrefix = documentId.substring(0, storageSeparatorIndex + 1);
+            String relativePath = documentId.substring(storageSeparatorIndex + 1);
+            int lastSlashIndex = relativePath.lastIndexOf('/');
+            if (lastSlashIndex < 0) {
+                return storagePrefix;
+            }
+            return storagePrefix + relativePath.substring(0, lastSlashIndex);
+        }
+        int lastSlashIndex = documentId.lastIndexOf('/');
+        if (lastSlashIndex < 0) {
+            throw new IllegalArgumentException("Parent document id not found.");
+        }
+        return documentId.substring(0, lastSlashIndex);
+    }
+
+    @NonNull
+    private static String removeExtension(@NonNull String fileName) {
+        int extensionSeparatorIndex = fileName.lastIndexOf('.');
+        if (extensionSeparatorIndex <= 0) {
+            return fileName;
+        }
+        return fileName.substring(0, extensionSeparatorIndex);
     }
 
     private void launchApkInstaller(@NonNull Uri uri) {
@@ -445,7 +809,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
             return null;
         }
         String normalizedFileName = fileName.toLowerCase(Locale.US);
-        if (matchesExtension(normalizedFileName, ".pgm")) {
+        if (matchesExtension(normalizedFileName, ".pgm", ".pmg")) {
             return OPEN_MODE_PGM;
         }
         if (matchesExtension(normalizedFileName, ".docx")) {
@@ -576,6 +940,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
         layoutEmptyState.setVisibility(View.GONE);
         viewPictureZoom.setVisibility(View.VISIBLE);
         viewPictureZoom.setBitmap(bitmap);
+        updateConvertPmgButton();
+        setTextQuickScrollVisible(false);
     }
 
     private void showMediaFile(@NonNull Uri uri) {
@@ -594,6 +960,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
         exoPlayer.setMediaItem(MediaItem.fromUri(uri));
         exoPlayer.prepare();
         exoPlayer.play();
+        updateConvertPmgButton();
+        setTextQuickScrollVisible(false);
     }
 
     @NonNull
@@ -636,10 +1004,10 @@ public class ActivityPictureViewer extends AppCompatActivity {
 
     private void showTextContent(@NonNull String textContent, boolean truncated) {
         stopMediaPlayback();
-        currentOriginalTextContent = appendTruncationNotice(textContent, truncated);
+        currentOriginalTextContent = textContent;
         currentTextContent = currentOriginalTextContent;
         currentFileIsMarkdown = isMarkdownFileName(currentFileName);
-        currentTextSupportsPrettyPrint = !truncated && isStructuredTextFileName(currentFileName);
+        currentTextSupportsPrettyPrint = isStructuredTextFileName(currentFileName);
         currentTextPrettyPrinted = false;
         markdownPreviewMode = false;
         currentTextSizeSp = DEFAULT_TEXT_SIZE_SP;
@@ -653,6 +1021,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
         updateTextActionButtons();
         applyCurrentTextZoom();
         applyCurrentTextPresentation();
+        updateConvertPmgButton();
+        scheduleTextQuickScrollUpdate();
     }
 
     @Nullable
@@ -790,6 +1160,70 @@ public class ActivityPictureViewer extends AppCompatActivity {
         }
     }
 
+    private void updateCurrentOpenTarget(@Nullable Uri uri, @NonNull String openMode) {
+        currentOpenedFileUri = uri;
+        currentOpenMode = openMode;
+        updateConvertPmgButton();
+    }
+
+    private void updateConvertPmgButton() {
+        boolean shouldShow = OPEN_MODE_PGM.equals(currentOpenMode) && currentOpenedFileUri != null && viewPictureZoom.getVisibility() == View.VISIBLE;
+        buttonConvertPmg.setVisibility(shouldShow ? View.VISIBLE : View.GONE);
+        buttonConvertPmg.setEnabled(shouldShow && !convertingPmg);
+    }
+
+    private void scheduleTextQuickScrollUpdate() {
+        scrollViewText.post(this::updateTextQuickScrollState);
+    }
+
+    private void updateTextQuickScrollState() {
+        if (scrollViewText.getVisibility() != View.VISIBLE || webViewMarkdownPreview.getVisibility() == View.VISIBLE) {
+            setTextQuickScrollVisible(false);
+            return;
+        }
+        int scrollRange = getTextScrollRange();
+        if (scrollRange <= 0) {
+            setTextQuickScrollVisible(false);
+            return;
+        }
+        setTextQuickScrollVisible(true);
+        int progress = Math.round((scrollViewText.getScrollY() * 1f / scrollRange) * TEXT_QUICK_SCROLL_MAX);
+        int percent = Math.round((scrollViewText.getScrollY() * 100f) / scrollRange);
+        updatingTextQuickScrollFromCode = true;
+        seekBarTextQuickScroll.setMax(TEXT_QUICK_SCROLL_MAX);
+        seekBarTextQuickScroll.setProgress(progress);
+        updatingTextQuickScrollFromCode = false;
+        textViewTextScrollPosition.setText(getString(R.string.text_scroll_position, percent));
+    }
+
+    private void scrollTextToQuickScrollProgress(int progress) {
+        int scrollRange = getTextScrollRange();
+        if (scrollRange <= 0) {
+            return;
+        }
+        int targetY = Math.round((progress * 1f / TEXT_QUICK_SCROLL_MAX) * scrollRange);
+        scrollViewText.scrollTo(0, targetY);
+        int percent = Math.round((targetY * 100f) / scrollRange);
+        textViewTextScrollPosition.setText(getString(R.string.text_scroll_position, percent));
+    }
+
+    private int getTextScrollRange() {
+        if (textViewFileContent.getLayout() == null) {
+            return 0;
+        }
+        return Math.max(0, textViewFileContent.getHeight() - scrollViewText.getHeight());
+    }
+
+    private void setTextQuickScrollVisible(boolean visible) {
+        layoutTextQuickScroll.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (!visible) {
+            updatingTextQuickScrollFromCode = true;
+            seekBarTextQuickScroll.setProgress(0);
+            updatingTextQuickScrollFromCode = false;
+            textViewTextScrollPosition.setText(R.string.text_scroll_position_initial);
+        }
+    }
+
     private void setHistoryPanelVisible(boolean visible) {
         layoutHistoryPanel.setVisibility(visible ? View.VISIBLE : View.GONE);
         buttonToggleHistory.setText(visible ? R.string.hide_history : R.string.show_history);
@@ -839,6 +1273,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
             webViewMarkdownPreview.loadDataWithBaseURL(null, "", "text/html", "utf-8", null);
             webViewMarkdownPreview.setVisibility(View.GONE);
             scrollViewText.setVisibility(View.GONE);
+            setTextQuickScrollVisible(false);
             textViewSearchCount.setText(R.string.search_no_result);
             buttonSearchPrevious.setEnabled(false);
             buttonSearchNext.setEnabled(false);
@@ -864,6 +1299,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
                         AppLogger.w(TAG, "Drop outdated open result. requestId=" + requestId + ", current=" + currentOpenRequestId);
                         return;
                     }
+                    updateCurrentOpenTarget(uri, openMode);
                     updateCurrentFileInfo(fileName, filePath);
                     applyOpenedFileContent(openedFileContent);
                     if (saveToHistory) {
@@ -928,13 +1364,13 @@ public class ActivityPictureViewer extends AppCompatActivity {
                 return OpenedFileContent.forBitmap(bitmap);
             }
             if (OPEN_MODE_DOCX.equals(openMode)) {
-                return OpenedFileContent.forText(truncatePreviewText(ReaderDocumentDocx.readText(inputStream), MAX_DOCX_PREVIEW_CHARACTERS));
+                return OpenedFileContent.forText(new ReaderTextPlain.PreviewTextResult(ReaderDocumentDocx.readText(inputStream), false));
             }
             if (OPEN_MODE_SPREADSHEET.equals(openMode)) {
-                return OpenedFileContent.forText(ReaderTableExcel.readPreview(inputStream, fileName, MAX_TEXT_PREVIEW_CHARACTERS));
+                return OpenedFileContent.forText(ReaderTableExcel.readAll(inputStream, fileName));
             }
             if (OPEN_MODE_TEXT.equals(openMode)) {
-                return OpenedFileContent.forText(ReaderTextPlain.readUtf8Preview(inputStream, MAX_TEXT_PREVIEW_CHARACTERS));
+                return OpenedFileContent.forText(ReaderTextPlain.readUtf8Preview(inputStream, Integer.MAX_VALUE));
             }
         }
         throw new IOException("Unsupported in-app open mode.");
@@ -954,6 +1390,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
 
     private void showLoadingState() {
         setOpenUiEnabled(false);
+        convertingPmg = false;
+        updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
         stopMediaPlayback();
         setTextSearchVisible(false);
         setTextActionsVisible(false);
@@ -962,6 +1400,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         scrollViewText.setVisibility(View.GONE);
         webViewMarkdownPreview.setVisibility(View.GONE);
         playerViewFile.setVisibility(View.GONE);
+        setTextQuickScrollVisible(false);
         layoutEmptyState.setVisibility(View.VISIBLE);
         textViewEmptyTitle.setText(R.string.loading_title);
         textViewEmptyMessage.setText(R.string.loading_message);
@@ -970,10 +1409,15 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private void setOpenUiEnabled(boolean enabled) {
         buttonOpenPgm.setEnabled(enabled);
         buttonToggleHistory.setEnabled(enabled);
+        updateConvertPmgButton();
     }
 
     private void tryTakePersistableReadPermission(@NonNull Uri uri, int flags) {
-        int takeFlags = flags & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        int takeFlags = flags & (
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        );
         if ((takeFlags & Intent.FLAG_GRANT_READ_URI_PERMISSION) == 0) {
             takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION;
         }
@@ -1103,25 +1547,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
         return new File(AppStoragePaths.resolveHistoryDirectory(this), HISTORY_FILE_NAME);
     }
 
-    @NonNull
-    private ReaderTextPlain.PreviewTextResult truncatePreviewText(@NonNull String textContent, int maxCharacters) {
-        if (textContent.length() <= maxCharacters) {
-            return new ReaderTextPlain.PreviewTextResult(textContent, false);
-        }
-        return new ReaderTextPlain.PreviewTextResult(textContent.substring(0, maxCharacters), true);
-    }
-
-    @NonNull
-    private String appendTruncationNotice(@NonNull String textContent, boolean truncated) {
-        if (!truncated) {
-            return textContent;
-        }
-        if (textContent.isEmpty()) {
-            return getString(R.string.text_preview_truncated_notice);
-        }
-        return textContent + "\n\n" + getString(R.string.text_preview_truncated_notice);
-    }
-
     private void togglePrettyPrint() {
         if (!currentTextSupportsPrettyPrint) {
             return;
@@ -1187,6 +1612,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         textViewFileContent.setTextSize(currentTextSizeSp);
         int textZoom = Math.round((currentTextSizeSp / DEFAULT_TEXT_SIZE_SP) * 100f);
         webViewMarkdownPreview.getSettings().setTextZoom(textZoom);
+        scheduleTextQuickScrollUpdate();
     }
 
     private void refreshSearchResults() {
@@ -1239,6 +1665,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         scrollViewText.setVisibility(View.VISIBLE);
         if (searchMatchStarts.isEmpty()) {
             textViewFileContent.setText(buildStyledSourceText(currentTextContent));
+            scheduleTextQuickScrollUpdate();
             return;
         }
         applySearchHighlight();
@@ -1247,6 +1674,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private void showMarkdownPreview() {
         scrollViewText.setVisibility(View.GONE);
         webViewMarkdownPreview.setVisibility(View.VISIBLE);
+        setTextQuickScrollVisible(false);
         Parser parser = Parser.builder().build();
         HtmlRenderer renderer = HtmlRenderer.builder().build();
         String htmlBody = renderer.render(parser.parse(currentTextContent));
@@ -1277,10 +1705,12 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private void applySearchHighlight() {
         if (currentTextContent.isEmpty()) {
             textViewFileContent.setText(null);
+            setTextQuickScrollVisible(false);
             return;
         }
         if (searchMatchStarts.isEmpty()) {
             textViewFileContent.setText(buildStyledSourceText(currentTextContent));
+            scheduleTextQuickScrollUpdate();
             return;
         }
         SpannableString spannableString = new SpannableString(buildStyledSourceText(currentTextContent));
@@ -1296,6 +1726,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
             }
         }
         textViewFileContent.setText(spannableString);
+        scheduleTextQuickScrollUpdate();
         scrollToCurrentSearchMatch();
     }
 
@@ -1449,6 +1880,10 @@ public class ActivityPictureViewer extends AppCompatActivity {
 
     private void showToast(int stringResId) {
         Toast.makeText(this, stringResId, Toast.LENGTH_SHORT).show();
+    }
+
+    private void showToast(@NonNull String text) {
+        Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
     }
 
     private static final class HistoryRecord {

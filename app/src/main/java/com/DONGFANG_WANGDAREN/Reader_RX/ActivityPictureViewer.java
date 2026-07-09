@@ -105,6 +105,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private static final String JSON_KEY_FILE_PATH = "file_path";
     private static final int MAX_HISTORY_RECORDS = 20;
     private static final int TEXT_QUICK_SCROLL_MAX = 1000;
+    private static final int TEXT_PREVIEW_INITIAL_CHARACTERS = 24 * 1024;
     private static final float DEFAULT_TEXT_SIZE_SP = 14f;
     private static final float MIN_TEXT_SIZE_SP = 10f;
     private static final float MAX_TEXT_SIZE_SP = 30f;
@@ -545,7 +546,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
 
     private void convertCurrentPgmToPmgFile() {
         Uri sourceUri = currentOpenedFileUri;
-        if (!OPEN_MODE_PGM.equals(currentOpenMode) || sourceUri == null || convertingPmg) {
+        if (!isCurrentPgmSourceFile() || sourceUri == null || convertingPmg) {
             return;
         }
         String outputFileName = buildPmgOutputFileName(currentFileName);
@@ -1167,9 +1168,19 @@ public class ActivityPictureViewer extends AppCompatActivity {
     }
 
     private void updateConvertPmgButton() {
-        boolean shouldShow = OPEN_MODE_PGM.equals(currentOpenMode) && currentOpenedFileUri != null && viewPictureZoom.getVisibility() == View.VISIBLE;
+        boolean shouldShow = isCurrentPgmSourceFile()
+                && currentOpenedFileUri != null
+                && viewPictureZoom.getVisibility() == View.VISIBLE;
         buttonConvertPmg.setVisibility(shouldShow ? View.VISIBLE : View.GONE);
         buttonConvertPmg.setEnabled(shouldShow && !convertingPmg);
+    }
+
+    private boolean isCurrentPgmSourceFile() {
+        if (!OPEN_MODE_PGM.equals(currentOpenMode)) {
+            return false;
+        }
+        String normalizedFileName = currentFileName == null ? "" : currentFileName.toLowerCase(Locale.US);
+        return normalizedFileName.endsWith(".pgm");
     }
 
     private void scheduleTextQuickScrollUpdate() {
@@ -1194,6 +1205,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         seekBarTextQuickScroll.setProgress(progress);
         updatingTextQuickScrollFromCode = false;
         textViewTextScrollPosition.setText(getString(R.string.text_scroll_position, percent));
+        updateTextQuickScrollIndicatorPosition(progress);
     }
 
     private void scrollTextToQuickScrollProgress(int progress) {
@@ -1205,6 +1217,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         scrollViewText.scrollTo(0, targetY);
         int percent = Math.round((targetY * 100f) / scrollRange);
         textViewTextScrollPosition.setText(getString(R.string.text_scroll_position, percent));
+        updateTextQuickScrollIndicatorPosition(progress);
     }
 
     private int getTextScrollRange() {
@@ -1221,7 +1234,25 @@ public class ActivityPictureViewer extends AppCompatActivity {
             seekBarTextQuickScroll.setProgress(0);
             updatingTextQuickScrollFromCode = false;
             textViewTextScrollPosition.setText(R.string.text_scroll_position_initial);
+            textViewTextScrollPosition.setTranslationY(0f);
         }
+    }
+
+    private void updateTextQuickScrollIndicatorPosition(int progress) {
+        layoutTextQuickScroll.post(() -> {
+            int containerHeight = layoutTextQuickScroll.getHeight();
+            int seekBarTop = seekBarTextQuickScroll.getTop();
+            int seekBarHeight = seekBarTextQuickScroll.getHeight();
+            int indicatorHeight = textViewTextScrollPosition.getHeight();
+            if (containerHeight <= 0 || seekBarHeight <= 0 || indicatorHeight <= 0) {
+                return;
+            }
+            float progressRatio = TEXT_QUICK_SCROLL_MAX == 0 ? 0f : (progress * 1f / TEXT_QUICK_SCROLL_MAX);
+            float thumbCenterY = seekBarTop + ((1f - progressRatio) * seekBarHeight);
+            float targetY = thumbCenterY - (indicatorHeight / 2f);
+            float clampedY = Math.max(0f, Math.min(targetY, containerHeight - indicatorHeight));
+            textViewTextScrollPosition.setTranslationY(clampedY);
+        });
     }
 
     private void setHistoryPanelVisible(boolean visible) {
@@ -1290,12 +1321,19 @@ public class ActivityPictureViewer extends AppCompatActivity {
     ) {
         int requestId = ++currentOpenRequestId;
         AppLogger.d(TAG, "Background open started. requestId=" + requestId + ", mode=" + openMode + ", file=" + fileName);
+        if (OPEN_MODE_TEXT.equals(openMode)) {
+            setOpenUiEnabled(false);
+            updateCurrentOpenTarget(uri, openMode);
+            updateCurrentFileInfo(fileName, filePath);
+            executorOpenFile.execute(() -> openTextFileWithPreview(uri, fileName, filePath, saveToHistory, promptDeleteOnMissing, requestId));
+            return;
+        }
         showLoadingState();
         executorOpenFile.execute(() -> {
             try {
                 OpenedFileContent openedFileContent = parseFileContent(uri, openMode, fileName);
                 runOnUiThread(() -> {
-                    if (isFinishing() || requestId != currentOpenRequestId) {
+                    if (!isActiveOpenRequest(requestId)) {
                         AppLogger.w(TAG, "Drop outdated open result. requestId=" + requestId + ", current=" + currentOpenRequestId);
                         return;
                     }
@@ -1310,7 +1348,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
             } catch (FileNotFoundException exception) {
                 AppLogger.e(TAG, "Background open missing file. requestId=" + requestId + ", uri=" + uri, exception);
                 runOnUiThread(() -> {
-                    if (isFinishing() || requestId != currentOpenRequestId) {
+                    if (!isActiveOpenRequest(requestId)) {
                         return;
                     }
                     setOpenUiEnabled(true);
@@ -1323,7 +1361,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
             } catch (IOException | IllegalArgumentException | SecurityException exception) {
                 AppLogger.e(TAG, "Background open failed. requestId=" + requestId + ", mode=" + openMode + ", uri=" + uri, exception);
                 runOnUiThread(() -> {
-                    if (isFinishing() || requestId != currentOpenRequestId) {
+                    if (!isActiveOpenRequest(requestId)) {
                         return;
                     }
                     setOpenUiEnabled(true);
@@ -1331,6 +1369,79 @@ public class ActivityPictureViewer extends AppCompatActivity {
                 });
             }
         });
+    }
+
+    private void openTextFileWithPreview(
+            @NonNull Uri uri,
+            @NonNull String fileName,
+            @NonNull String filePath,
+            boolean saveToHistory,
+            boolean promptDeleteOnMissing,
+            int requestId
+    ) {
+        try (InputStream previewInputStream = getContentResolver().openInputStream(uri)) {
+            if (previewInputStream == null) {
+                throw new FileNotFoundException("Input stream is null.");
+            }
+            ReaderTextPlain.PreviewTextResult previewTextResult =
+                    ReaderTextPlain.readUtf8Preview(previewInputStream, TEXT_PREVIEW_INITIAL_CHARACTERS);
+            runOnUiThread(() -> {
+                if (!isActiveOpenRequest(requestId)) {
+                    return;
+                }
+                showTextContent(previewTextResult.textContent, previewTextResult.truncated);
+                if (saveToHistory) {
+                    recordHistory(uri.toString(), fileName, filePath);
+                }
+                setOpenUiEnabled(true);
+            });
+            if (!previewTextResult.truncated || !isActiveOpenRequest(requestId)) {
+                return;
+            }
+        } catch (FileNotFoundException exception) {
+            AppLogger.e(TAG, "Text preview open missing file. requestId=" + requestId + ", uri=" + uri, exception);
+            runOnUiThread(() -> {
+                if (!isActiveOpenRequest(requestId)) {
+                    return;
+                }
+                setOpenUiEnabled(true);
+                if (promptDeleteOnMissing) {
+                    showMissingHistoryDialog(uri.toString(), fileName);
+                } else {
+                    showToast(R.string.toast_open_failed);
+                }
+            });
+            return;
+        } catch (IOException | IllegalArgumentException | SecurityException exception) {
+            AppLogger.e(TAG, "Text preview open failed. requestId=" + requestId + ", uri=" + uri, exception);
+            runOnUiThread(() -> {
+                if (!isActiveOpenRequest(requestId)) {
+                    return;
+                }
+                setOpenUiEnabled(true);
+                showToast(R.string.toast_open_failed);
+            });
+            return;
+        }
+
+        try (InputStream fullInputStream = getContentResolver().openInputStream(uri)) {
+            if (fullInputStream == null) {
+                throw new FileNotFoundException("Input stream is null.");
+            }
+            String fullText = ReaderTextPlain.readUtf8(fullInputStream);
+            runOnUiThread(() -> {
+                if (!isActiveOpenRequest(requestId)) {
+                    return;
+                }
+                showTextContent(fullText, false);
+            });
+        } catch (IOException | IllegalArgumentException | SecurityException exception) {
+            AppLogger.e(TAG, "Full text background load failed. requestId=" + requestId + ", uri=" + uri, exception);
+        }
+    }
+
+    private boolean isActiveOpenRequest(int requestId) {
+        return !isFinishing() && requestId == currentOpenRequestId;
     }
 
     @NonNull

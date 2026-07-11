@@ -1,13 +1,21 @@
 package com.DONGFANG_WANGDAREN.Reader_RX;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 
 import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
@@ -33,7 +41,9 @@ import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
@@ -43,6 +53,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class WebSocketService extends Service {
 
     private static final String TAG = "WebSocketService";
+    private static final String ACTION_STOP = "com.DONGFANG_WANGDAREN.Reader_RX.STOP_WEBSOCKET";
+    private static final String NOTIFICATION_CHANNEL_ID = "websocket_service_channel";
+    private static final int NOTIFICATION_ID = 1;
 
     private final IBinder binder = new LocalBinder();
     private final CopyOnWriteArrayList<EventListener> listeners = new CopyOnWriteArrayList<>();
@@ -55,8 +68,25 @@ public class WebSocketService extends Service {
     private ReaderWebSocketServer webSocketServer;
     @Nullable
     private ReaderHttpServer httpServer;
+    @Nullable
+    private WebHttpRouter httpRouter;
     private boolean running;
     private int connectedClientCount;
+    @Nullable
+    private String lastMessagePreview;
+
+    private long totalMessagesReceived;
+    private long totalMessagesSent;
+    private long totalUniqueUsers;
+    private int peakActiveUsers;
+    private long bytesReceived;
+    private long bytesSent;
+    private long serverStartTime;
+
+    @NonNull
+    private String httpAuthToken = "";
+
+    private final Map<WebSocket, UserSession> userSessions = new ConcurrentHashMap<>();
 
     @Nullable
     private File chatFile;
@@ -103,7 +133,11 @@ public class WebSocketService extends Service {
 
     @Override
     public int onStartCommand(@Nullable Intent intent, int flags, int startId) {
-        AppLogger.d(TAG, "onStartCommand. startId=" + startId);
+        AppLogger.d(TAG, "onStartCommand. startId=" + startId + " action=" + (intent != null ? intent.getAction() : "null"));
+        if (intent != null && ACTION_STOP.equals(intent.getAction())) {
+            stopServer();
+            return START_NOT_STICKY;
+        }
         startServer();
         return START_STICKY;
     }
@@ -147,15 +181,18 @@ public class WebSocketService extends Service {
     public void startServer() {
         if (running) {
             log("Server is already running.");
+            ensureForegroundNotification();
             return;
         }
         try {
             AppConfig config = AppConfig.get();
+            startForeground(NOTIFICATION_ID, buildNotification());
             webSocketServer = new ReaderWebSocketServer(new InetSocketAddress(config.getWebSocketPort()));
             webSocketServer.setReuseAddr(true);
             webSocketServer.start();
             startHttpServer();
             running = true;
+            resetStats();
             openChatFile();
             String address = getServerAddress();
             String httpAddress = getHttpAddress();
@@ -181,6 +218,7 @@ public class WebSocketService extends Service {
 
     public void stopServer() {
         if (!running) {
+            stopForegroundServiceIfNeeded();
             return;
         }
         running = false;
@@ -198,6 +236,119 @@ public class WebSocketService extends Service {
         connectedClientCount = 0;
         log("Server stopped.");
         notifyServerStopped();
+        stopForegroundServiceIfNeeded();
+    }
+
+    private void ensureForegroundNotification() {
+        if (running) {
+            startForeground(NOTIFICATION_ID, buildNotification());
+        }
+    }
+
+    @NonNull
+    private Notification buildNotification() {
+        createNotificationChannel();
+        String httpAddress = getHttpAddress();
+        String defaultContent = getString(R.string.websocket_notification_text);
+        if (httpAddress != null && !httpAddress.isEmpty()) {
+            defaultContent = getString(R.string.websocket_browser_address) + ": " + httpAddress;
+        }
+        String content = lastMessagePreview != null ? lastMessagePreview : defaultContent;
+        String bigText = lastMessagePreview != null ? defaultContent + "\n" + lastMessagePreview : defaultContent;
+        PendingIntent contentIntent = getContentPendingIntent();
+        PendingIntent stopIntent = getStopPendingIntent();
+        return new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_menu_share)
+                .setContentTitle(getString(R.string.websocket_notification_title))
+                .setContentText(content)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(bigText))
+                .setContentIntent(contentIntent)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.websocket_notification_stop), stopIntent)
+                .build();
+    }
+
+    private void updateNotificationForMessage(@NonNull String payload) {
+        lastMessagePreview = extractMessagePreview(payload);
+        if (!running) {
+            return;
+        }
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager != null) {
+            manager.notify(NOTIFICATION_ID, buildNotification());
+        }
+    }
+
+    @NonNull
+    private String extractMessagePreview(@NonNull String payload) {
+        try {
+            JSONObject jsonObject = new JSONObject(payload);
+            String from = jsonObject.optString("from", "Unknown");
+            String message = jsonObject.optString("message", "");
+            String type = jsonObject.optString("type", "");
+            boolean system = jsonObject.optBoolean("system", false);
+            if (system) {
+                return "[System] " + message;
+            }
+            if (AppConfig.get().getMessageTypeImage().equals(type)) {
+                return "[" + from + "] " + getString(R.string.websocket_image_label);
+            }
+            return "[" + from + "] " + message;
+        } catch (JSONException exception) {
+            return payload;
+        }
+    }
+
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return;
+        }
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) {
+            return;
+        }
+        NotificationChannel channel = manager.getNotificationChannel(NOTIFICATION_CHANNEL_ID);
+        if (channel != null) {
+            return;
+        }
+        channel = new NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                getString(R.string.websocket_notification_channel_name),
+                NotificationManager.IMPORTANCE_LOW);
+        channel.setDescription(getString(R.string.websocket_notification_channel_description));
+        manager.createNotificationChannel(channel);
+    }
+
+    @NonNull
+    private PendingIntent getContentPendingIntent() {
+        Intent intent = new Intent(this, ActivityWebSocket.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            flags |= PendingIntent.FLAG_IMMUTABLE;
+        }
+        return PendingIntent.getActivity(this, 0, intent, flags);
+    }
+
+    @NonNull
+    private PendingIntent getStopPendingIntent() {
+        Intent intent = new Intent(this, WebSocketService.class);
+        intent.setAction(ACTION_STOP);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            flags |= PendingIntent.FLAG_IMMUTABLE;
+        }
+        return PendingIntent.getService(this, 1, intent, flags);
+    }
+
+    private void stopForegroundServiceIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE);
+        } else {
+            stopForeground(true);
+        }
+        stopSelf();
     }
 
     private void openChatFile() {
@@ -289,6 +440,89 @@ public class WebSocketService extends Service {
         return connectedClientCount;
     }
 
+    public long getTotalMessagesReceived() {
+        return totalMessagesReceived;
+    }
+
+    public long getTotalMessagesSent() {
+        return totalMessagesSent;
+    }
+
+    public long getTotalUniqueUsers() {
+        return totalUniqueUsers;
+    }
+
+    public int getPeakActiveUsers() {
+        return peakActiveUsers;
+    }
+
+    public int getWebSocketPort() {
+        return AppConfig.get().getWebSocketPort();
+    }
+
+    public int getHttpPort() {
+        return AppConfig.get().getHttpPort();
+    }
+
+    /**
+     * Returns the estimated app process CPU usage as a percentage, or -1 if it cannot be read.
+     */
+    public double getProcessCpuUsage() {
+        return CpuUsageSampler.getProcessCpuUsage();
+    }
+
+    @NonNull
+    public WebSocketServiceStatsSnapshot getServiceStatsSnapshot() {
+        long uptime = running ? Math.max(0, System.currentTimeMillis() - serverStartTime) : 0;
+        return new WebSocketServiceStatsSnapshot(
+                running,
+                uptime,
+                totalMessagesReceived,
+                totalMessagesSent,
+                totalUniqueUsers,
+                connectedClientCount,
+                peakActiveUsers,
+                AppConfig.get().getWebSocketPort(),
+                AppConfig.get().getHttpPort(),
+                getProcessCpuUsage(),
+                bytesReceived,
+                bytesSent,
+                NetworkInfoHelper.getWifiLinkSpeedMbps(this),
+                NetworkInfoHelper.getWifiSignalDbm(this),
+                NetworkInfoHelper.getWifiSignalLevel(this),
+                NetworkInfoHelper.isWifiConnected(this)
+        );
+    }
+
+    @NonNull
+    public List<UserSessionSnapshot> getUserSessionSnapshots() {
+        List<UserSessionSnapshot> result = new ArrayList<>();
+        for (UserSession session : userSessions.values()) {
+            result.add(new UserSessionSnapshot(
+                    session.userName,
+                    session.address,
+                    session.connectTime,
+                    session.lastActiveTime,
+                    session.disconnectTime,
+                    session.messageCount,
+                    session.online
+            ));
+        }
+        return result;
+    }
+
+    private void resetStats() {
+        totalMessagesReceived = 0;
+        totalMessagesSent = 0;
+        totalUniqueUsers = 0;
+        peakActiveUsers = 0;
+        bytesReceived = 0;
+        bytesSent = 0;
+        serverStartTime = System.currentTimeMillis();
+        lastMessagePreview = null;
+        userSessions.clear();
+    }
+
     @Nullable
     public String getServerAddress() {
         String ipAddress = getLocalIpAddress();
@@ -313,7 +547,9 @@ public class WebSocketService extends Service {
         }
         try {
             httpServer = new ReaderHttpServer(AppConfig.get().getHttpPort());
+            httpRouter = new WebHttpRouter(WebSocketService.this);
             httpServer.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false);
+            httpAuthToken = generateHttpAuthToken();
         } catch (Exception exception) {
             log("Failed to start HTTP server: " + exception.getMessage());
             AppLogger.e(TAG, "Failed to start HTTP server.", exception);
@@ -325,6 +561,23 @@ public class WebSocketService extends Service {
             httpServer.stop();
             httpServer = null;
         }
+        httpRouter = null;
+        httpAuthToken = "";
+    }
+
+    @NonNull
+    public String getHttpAuthToken() {
+        return httpAuthToken;
+    }
+
+    @NonNull
+    private String generateHttpAuthToken() {
+        StringBuilder builder = new StringBuilder(32);
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        for (int i = 0; i < 32; i++) {
+            builder.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return builder.toString();
     }
 
     public void sendCustomMessage(@NonNull String message) {
@@ -370,8 +623,11 @@ public class WebSocketService extends Service {
             return;
         }
         webSocketServer.broadcast(message);
+        totalMessagesSent++;
+        bytesSent += message.getBytes(StandardCharsets.UTF_8).length;
         appendChatMessage(message);
         notifyImageMessageIfNeeded(message);
+        updateNotificationForMessage(message);
     }
 
     private void notifyImageMessageIfNeeded(@NonNull String message) {
@@ -436,7 +692,7 @@ public class WebSocketService extends Service {
     }
 
     @Nullable
-    private static String getLocalIpAddress() {
+    public static String getLocalIpAddress() {
         try {
             Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
             while (networkInterfaces.hasMoreElements()) {
@@ -467,34 +723,10 @@ public class WebSocketService extends Service {
 
         @Override
         public Response serve(@NonNull IHTTPSession session) {
-            String uri = session.getUri();
-            String imagePrefix = AppConfig.get().getImageUrlPrefix();
-            if (uri != null && uri.startsWith(imagePrefix)) {
-                return serveImage(uri, imagePrefix);
+            if (httpRouter != null) {
+                return httpRouter.route(session);
             }
-            String html = buildHtmlPage();
-            byte[] bytes = html.getBytes(StandardCharsets.UTF_8);
-            return newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", new ByteArrayInputStream(bytes), bytes.length);
-        }
-
-        @NonNull
-        private Response serveImage(@NonNull String uri, @NonNull String prefix) {
-            String fileName = uri.substring(prefix.length());
-            if (fileName.isEmpty() || fileName.contains("..") || fileName.contains("/")) {
-                return newFixedLengthResponse(Response.Status.BAD_REQUEST, NanoHTTPD.MIME_PLAINTEXT, "Invalid image name.");
-            }
-            File imageFile = new File(AppStoragePaths.resolveWebSocketChatImagesDirectory(WebSocketService.this), fileName);
-            if (!imageFile.exists() || !imageFile.isFile()) {
-                return newFixedLengthResponse(Response.Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "Image not found.");
-            }
-            String mimeType = getImageMimeType(fileName);
-            try {
-                FileInputStream inputStream = new FileInputStream(imageFile);
-                return newFixedLengthResponse(Response.Status.OK, mimeType, inputStream, imageFile.length());
-            } catch (FileNotFoundException exception) {
-                AppLogger.e(TAG, "Image file not found: " + imageFile.getAbsolutePath(), exception);
-                return newFixedLengthResponse(Response.Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "Image not found.");
-            }
+            return newFixedLengthResponse(Response.Status.SERVICE_UNAVAILABLE, NanoHTTPD.MIME_PLAINTEXT, "HTTP router not ready.");
         }
     }
 
@@ -578,7 +810,10 @@ public class WebSocketService extends Service {
         public void onOpen(@NonNull WebSocket conn, @NonNull ClientHandshake handshake) {
             String userName = resolveClientName(conn, handshake);
             clientNames.put(conn, userName);
+            userSessions.put(conn, new UserSession(userName, conn.getRemoteSocketAddress().toString()));
+            totalUniqueUsers++;
             setConnectedClientCount(getConnections().size());
+            peakActiveUsers = Math.max(peakActiveUsers, connectedClientCount);
             log("Client connected: " + userName + " @ " + conn.getRemoteSocketAddress() + " (total: " + connectedClientCount + ")");
             String joinMessage = buildChatMessage(AppConfig.get().getSenderSystem(), userName + " 进入聊天室", true);
             broadcastMessage(joinMessage);
@@ -587,6 +822,10 @@ public class WebSocketService extends Service {
         @Override
         public void onClose(@NonNull WebSocket conn, int code, @NonNull String reason, boolean remote) {
             String userName = clientNames.remove(conn);
+            UserSession session = userSessions.get(conn);
+            if (session != null) {
+                session.markOffline();
+            }
             setConnectedClientCount(getConnections().size());
             log("Client disconnected: " + (userName != null ? userName : conn.getRemoteSocketAddress()) + " (total: " + connectedClientCount + ")");
             if (userName != null) {
@@ -597,6 +836,13 @@ public class WebSocketService extends Service {
 
         @Override
         public void onMessage(@NonNull WebSocket conn, @NonNull String message) {
+            totalMessagesReceived++;
+            bytesReceived += message.getBytes(StandardCharsets.UTF_8).length;
+            UserSession session = userSessions.get(conn);
+            if (session != null) {
+                session.messageCount++;
+                session.lastActiveTime = System.currentTimeMillis();
+            }
             String userName = clientNames.get(conn);
             if (userName == null) {
                 userName = conn.getRemoteSocketAddress().toString();
@@ -633,5 +879,32 @@ public class WebSocketService extends Service {
             }
         }
         return "User-" + String.format(Locale.US, "%04d", random.nextInt(10000));
+    }
+
+    public static final class UserSession {
+        @NonNull
+        public final String userName;
+        @NonNull
+        public final String address;
+        public final long connectTime;
+        public long lastActiveTime;
+        public long disconnectTime;
+        public long messageCount;
+        public boolean online;
+
+        UserSession(@NonNull String userName, @NonNull String address) {
+            this.userName = userName;
+            this.address = address;
+            this.connectTime = System.currentTimeMillis();
+            this.lastActiveTime = connectTime;
+            this.disconnectTime = -1;
+            this.messageCount = 0;
+            this.online = true;
+        }
+
+        void markOffline() {
+            this.online = false;
+            this.disconnectTime = System.currentTimeMillis();
+        }
     }
 }

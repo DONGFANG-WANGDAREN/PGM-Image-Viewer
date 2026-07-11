@@ -7,6 +7,8 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.view.Window;
+import android.widget.ImageView;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -15,9 +17,7 @@ import android.text.TextUtils;
 import android.text.method.LinkMovementMethod;
 import android.text.style.ClickableSpan;
 import android.view.View;
-import android.view.Window;
 import android.widget.EditText;
-import android.widget.ImageView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -27,6 +27,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.material.button.MaterialButton;
 
@@ -147,13 +148,13 @@ public class ActivityWebSocket extends AppCompatActivity {
 
     private void startAndBindService() {
         Intent serviceIntent = new Intent(this, WebSocketService.class);
-        startService(serviceIntent);
+        ContextCompat.startForegroundService(this, serviceIntent);
         bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE);
     }
 
     private void toggleServer() {
         if (webSocketService == null) {
-            showToast(R.string.websocket_error_not_connected);
+            startAndBindService();
             return;
         }
         if (webSocketService.isRunning()) {

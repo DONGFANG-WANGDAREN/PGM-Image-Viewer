@@ -55,7 +55,9 @@ It can open files from the in-app picker and also receive system `VIEW` intents 
 
 The tools menu is opened from the main screen and currently contains:
 
+- **WebSocket Dashboard** — lists the running local WebSocket service and opens a detailed statistics page.
 - **Chat Room** — starts a local WebSocket server and a built-in HTTP monitor page.
+- **Scan Web Login** — scans a QR code displayed on another device to authorize its browser session.
 
 In the chat room:
 
@@ -65,6 +67,33 @@ In the chat room:
 - Messages are broadcast to all connected clients, with sender names shown.
 - The app can send text and images selected from the gallery.
 - System messages notify when users enter or leave the chat room.
+- The service runs in the foreground with a persistent notification. It keeps running after leaving the chat page or sending the app to the background, and only stops when the user presses **Stop** in the notification or the in-app **Stop Server** button, or when the app process is killed.
+- The notification content is updated with the latest incoming message preview, so users can see new activity at a glance.
+
+### Web Login & File Manager
+
+The HTTP server provides a web login flow designed for use from another device on the same LAN:
+
+1. On the other device, open `http://<device-ip>:8081/web-login`. The page shows a QR code that identifies the browser session.
+2. In the app, open **Tools → Scan Web Login** and point the camera at the QR code.
+3. After the app confirms the scan, the browser is automatically logged in and redirected to the file manager.
+
+From the web interface you can:
+
+- View detailed device information.
+- Browse files in external storage.
+- Download files or view text and image files online.
+
+The browser session is authenticated with a randomly generated token stored in a cookie. Each QR code is single-use and expires after a few minutes if not scanned.
+
+### WebSocket Dashboard
+
+The dashboard shows the running local service and, when opened, displays real-time statistics grouped into:
+
+- **Service** — running status, uptime, messages received/sent, total/active/peak users, WebSocket/HTTP ports
+- **Network** — WiFi connection status, link speed, signal strength, bytes received/sent
+- **Device** — estimated app CPU usage
+- **Users** — per-user list showing online/offline status, stay duration, message count, and last active time
 
 > Ports, sender names, and message types can be changed in [`app_config.json`](app/src/main/assets/app_config.json).
 

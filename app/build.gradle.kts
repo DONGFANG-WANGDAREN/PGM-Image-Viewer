@@ -41,6 +41,8 @@ dependencies {
     implementation(libs.pdf.viewer)
     implementation(libs.java.websocket)
     implementation(libs.nanohttpd)
+    implementation(libs.zxing.core)
+    implementation(libs.zxing.android.embedded)
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)

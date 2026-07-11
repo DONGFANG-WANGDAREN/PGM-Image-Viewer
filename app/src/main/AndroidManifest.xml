@@ -1,8 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
 
     <application
         android:name=".AppPgmImageViewer"
@@ -14,6 +25,12 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.PGMImageViewer">
+
+        <activity
+            android:name="com.journeyapps.barcodescanner.CaptureActivity"
+            android:screenOrientation="portrait"
+            tools:replace="screenOrientation" />
+
         <activity
             android:name=".ActivityPictureViewer"
             android:exported="true">
@@ -209,10 +226,21 @@
             android:exported="false"
             android:label="@string/websocket_title"
             android:theme="@style/Theme.PGMImageViewer" />
+        <activity
+            android:name=".ActivityWebSocketDashboard"
+            android:exported="false"
+            android:label="@string/tools_dashboard"
+            android:theme="@style/Theme.PGMImageViewer" />
+        <activity
+            android:name=".ActivityWebSocketStats"
+            android:exported="false"
+            android:label="@string/tools_dashboard_stats"
+            android:theme="@style/Theme.PGMImageViewer" />
 
         <service
             android:name=".WebSocketService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="remoteMessaging" />
     </application>
 
 </manifest>

@@ -53,4 +53,26 @@
     <string name="text_pretty_raw">Original</string>
     <string name="text_zoom_in">Larger Text</string>
     <string name="text_zoom_out">Smaller Text</string>
+    <string name="open_websocket">WebSocket</string>
+    <string name="websocket_title">WebSocket Server</string>
+    <string name="websocket_server_address">WebSocket address for other apps</string>
+    <string name="websocket_browser_address">Open in browser</string>
+    <string name="websocket_url_hint">ws:// or wss:// URL</string>
+    <string name="websocket_default_url">wss://ws.postman-echo.com/raw</string>
+    <string name="websocket_connect">Connect</string>
+    <string name="websocket_disconnect">Disconnect</string>
+    <string name="websocket_start">Start Server</string>
+    <string name="websocket_stop">Stop Server</string>
+    <string name="websocket_send">Send</string>
+    <string name="websocket_message_hint">Custom message</string>
+    <string name="websocket_status_disconnected">Disconnected</string>
+    <string name="websocket_status_connecting">Connecting…</string>
+    <string name="websocket_status_connected">Connected</string>
+    <string name="websocket_status_stopped">Server stopped</string>
+    <string name="websocket_status_running">Server running</string>
+    <string name="websocket_clients">Connected clients: %1$d</string>
+    <string name="websocket_error_invalid_url">Please enter a valid WebSocket URL.</string>
+    <string name="websocket_error_connection_failed">Failed to connect.</string>
+    <string name="websocket_error_not_connected">Not connected.</string>
+    <string name="websocket_error_send_failed">Failed to send message.</string>
 </resources>

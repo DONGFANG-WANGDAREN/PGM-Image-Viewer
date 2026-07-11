@@ -106,6 +106,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private static final int MAX_HISTORY_RECORDS = 20;
     private static final int TEXT_QUICK_SCROLL_MAX = 1000;
     private static final int TEXT_PREVIEW_INITIAL_CHARACTERS = 24 * 1024;
+    private static final int LARGE_TEXT_INTERACTION_THRESHOLD = 512 * 1024;
     private static final float DEFAULT_TEXT_SIZE_SP = 14f;
     private static final float MIN_TEXT_SIZE_SP = 10f;
     private static final float MAX_TEXT_SIZE_SP = 30f;
@@ -114,6 +115,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private ActivityResultLauncher<Uri> launcherOpenDocumentTree;
     private ActivityResultLauncher<Intent> launcherManageAllFilesAccess;
     private MaterialButton buttonOpenPgm;
+    private MaterialButton buttonOpenWebSocket;
     private MaterialButton buttonConvertPmg;
     private ViewPictureZoom viewPictureZoom;
     private View layoutTextSearch;
@@ -162,6 +164,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private String pendingPmgOutputFileName;
     private String currentOpenMode = OPEN_MODE_UNSUPPORTED;
     private boolean currentFileIsMarkdown;
+    private boolean currentTextLargeMode;
     private boolean currentTextSupportsPrettyPrint;
     private boolean currentTextPrettyPrinted;
     private boolean markdownPreviewMode;
@@ -217,6 +220,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         );
 
         buttonOpenPgm = findViewById(R.id.button_open_pgm);
+        buttonOpenWebSocket = findViewById(R.id.button_open_websocket);
         buttonConvertPmg = findViewById(R.id.button_convert_pmg);
         viewPictureZoom = findViewById(R.id.view_picture_zoom);
         layoutTextSearch = findViewById(R.id.layout_text_search);
@@ -260,6 +264,10 @@ public class ActivityPictureViewer extends AppCompatActivity {
         playerViewFile.setShowRewindButton(true);
 
         buttonOpenPgm.setOnClickListener(view -> launcherOpenDocument.launch(new String[]{"*/*"}));
+        buttonOpenWebSocket.setOnClickListener(view -> {
+            setHistoryPanelVisible(false);
+            startActivity(new Intent(this, ActivityWebSocket.class));
+        });
         buttonConvertPmg.setOnClickListener(view -> convertCurrentPgmToPmgFile());
         buttonToggleHistory.setOnClickListener(view -> setHistoryPanelVisible(layoutHistoryPanel.getVisibility() != View.VISIBLE));
         buttonSearchPrevious.setOnClickListener(view -> moveToSearchMatch(-1));
@@ -1008,6 +1016,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         currentOriginalTextContent = textContent;
         currentTextContent = currentOriginalTextContent;
         currentFileIsMarkdown = isMarkdownFileName(currentFileName);
+        currentTextLargeMode = isLargeTextContent(currentTextContent);
         currentTextSupportsPrettyPrint = isStructuredTextFileName(currentFileName);
         currentTextPrettyPrinted = false;
         markdownPreviewMode = false;
@@ -1017,8 +1026,16 @@ public class ActivityPictureViewer extends AppCompatActivity {
         playerViewFile.setVisibility(View.GONE);
         layoutEmptyState.setVisibility(View.GONE);
         scrollViewText.scrollTo(0, 0);
-        setTextSearchVisible(true);
-        setTextActionsVisible(true);
+        searchMatchStarts.clear();
+        searchMatchEnds.clear();
+        currentSearchIndex = -1;
+        editTextSearch.setText(null);
+        textViewSearchCount.setText(R.string.search_no_result);
+        buttonSearchPrevious.setEnabled(false);
+        buttonSearchNext.setEnabled(false);
+        layoutTextSearch.setVisibility(currentTextLargeMode ? View.GONE : View.VISIBLE);
+        layoutTextActions.setVisibility(currentTextLargeMode ? View.GONE : View.VISIBLE);
+        textViewFileContent.setTextIsSelectable(!currentTextLargeMode);
         updateTextActionButtons();
         applyCurrentTextZoom();
         applyCurrentTextPresentation();
@@ -1280,8 +1297,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
         }
         buttonTextZoomIn.setVisibility(View.VISIBLE);
         buttonTextZoomOut.setVisibility(View.VISIBLE);
-        buttonToggleMarkdownPreview.setVisibility(currentFileIsMarkdown ? View.VISIBLE : View.GONE);
-        buttonPrettyPrint.setVisibility(currentTextSupportsPrettyPrint ? View.VISIBLE : View.GONE);
+        buttonToggleMarkdownPreview.setVisibility(!currentTextLargeMode && currentFileIsMarkdown ? View.VISIBLE : View.GONE);
+        buttonPrettyPrint.setVisibility(!currentTextLargeMode && currentTextSupportsPrettyPrint ? View.VISIBLE : View.GONE);
         buttonToggleMarkdownPreview.setText(markdownPreviewMode ? R.string.markdown_source : R.string.markdown_preview);
         buttonPrettyPrint.setText(currentTextPrettyPrinted ? R.string.text_pretty_raw : R.string.text_pretty_print);
     }
@@ -1292,6 +1309,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
             currentTextContent = "";
             currentOriginalTextContent = "";
             currentFileIsMarkdown = false;
+            currentTextLargeMode = false;
             currentTextSupportsPrettyPrint = false;
             currentTextPrettyPrinted = false;
             markdownPreviewMode = false;
@@ -1300,6 +1318,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
             searchMatchEnds.clear();
             currentSearchIndex = -1;
             editTextSearch.setText(null);
+            textViewFileContent.setTextIsSelectable(true);
             textViewFileContent.setText(null);
             webViewMarkdownPreview.loadDataWithBaseURL(null, "", "text/html", "utf-8", null);
             webViewMarkdownPreview.setVisibility(View.GONE);
@@ -1729,6 +1748,13 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private void refreshSearchResults() {
         searchMatchStarts.clear();
         searchMatchEnds.clear();
+        if (currentTextLargeMode) {
+            currentSearchIndex = -1;
+            textViewFileContent.setText(currentTextContent, TextView.BufferType.NORMAL);
+            updateSearchControls();
+            scheduleTextQuickScrollUpdate();
+            return;
+        }
         String query = editTextSearch.getText().toString();
         if (currentTextContent.isEmpty()) {
             textViewFileContent.setText(null);
@@ -1764,7 +1790,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
 
     private void applyCurrentTextPresentation() {
         updateTextActionButtons();
-        if (currentFileIsMarkdown && markdownPreviewMode) {
+        if (!currentTextLargeMode && currentFileIsMarkdown && markdownPreviewMode) {
             showMarkdownPreview();
             return;
         }
@@ -1774,6 +1800,11 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private void showTextSourceWithOptionalHighlight() {
         webViewMarkdownPreview.setVisibility(View.GONE);
         scrollViewText.setVisibility(View.VISIBLE);
+        if (currentTextLargeMode) {
+            textViewFileContent.setText(currentTextContent, TextView.BufferType.NORMAL);
+            scheduleTextQuickScrollUpdate();
+            return;
+        }
         if (searchMatchStarts.isEmpty()) {
             textViewFileContent.setText(buildStyledSourceText(currentTextContent));
             scheduleTextQuickScrollUpdate();
@@ -1817,6 +1848,11 @@ public class ActivityPictureViewer extends AppCompatActivity {
         if (currentTextContent.isEmpty()) {
             textViewFileContent.setText(null);
             setTextQuickScrollVisible(false);
+            return;
+        }
+        if (currentTextLargeMode) {
+            textViewFileContent.setText(currentTextContent, TextView.BufferType.NORMAL);
+            scheduleTextQuickScrollUpdate();
             return;
         }
         if (searchMatchStarts.isEmpty()) {
@@ -1976,6 +2012,10 @@ public class ActivityPictureViewer extends AppCompatActivity {
                 ".json", ".xml", ".java", ".swift", ".kt", ".kts", ".js", ".ts",
                 ".html", ".htm", ".css", ".yaml", ".yml", ".properties", ".gradle", ".md"
         );
+    }
+
+    private boolean isLargeTextContent(@NonNull String textContent) {
+        return textContent.length() >= LARGE_TEXT_INTERACTION_THRESHOLD;
     }
 
     @Override

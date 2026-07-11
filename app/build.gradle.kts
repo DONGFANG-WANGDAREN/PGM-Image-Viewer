@@ -39,6 +39,8 @@ dependencies {
     implementation(libs.media3.ui)
     implementation(libs.jxl)
     implementation(libs.pdf.viewer)
+    implementation(libs.java.websocket)
+    implementation(libs.nanohttpd)
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)

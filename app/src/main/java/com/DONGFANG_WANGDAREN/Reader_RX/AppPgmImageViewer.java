@@ -11,6 +11,7 @@ public class AppPgmImageViewer extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        AppConfig.init(this);
         AppLogger.init(this);
         AppLogger.i(TAG, "Application started.");
 

@@ -1,0 +1,38 @@
+{
+  "storage": {
+    "appFolderName": "Reader RX",
+    "logsFolder": "Log",
+    "historyFolder": "History",
+    "webSocketChatFolder": "WebSocket/Chat",
+    "webSocketChatImagesFolder": "Images"
+  },
+  "naming": {
+    "logDayFolderFormat": "yyyy-MM-dd",
+    "logFileNameFormat": "'Log'_HH-mm_yyyy-MM-dd",
+    "logFileExtension": ".txt",
+    "historyFileName": "History.json",
+    "chatDayFolderFormat": "yyyy-MM-dd",
+    "chatFileNameFormat": "'Chat'_HH-mm-ss_yyyy-MM-dd",
+    "chatFileExtension": ".txt",
+    "chatLogTimeFormat": "HH:mm:ss",
+    "chatImageFileNameFormat": "'Chat'_yyyy-MM-dd_HH-mm-ss",
+    "chatImageFileDefaultExtension": ".jpg"
+  },
+  "websocket": {
+    "port": 8080,
+    "httpPort": 8081,
+    "senderApp": "Reader RX",
+    "senderSystem": "System",
+    "messageTypeText": "text",
+    "messageTypeImage": "image",
+    "imageUrlPrefix": "/images/"
+  },
+  "viewer": {
+    "textPreviewInitialCharacters": 24576,
+    "largeTextInteractionThreshold": 524288,
+    "maxHistoryRecords": 20,
+    "defaultTextSizeSp": 14.0,
+    "minTextSizeSp": 10.0,
+    "maxTextSizeSp": 30.0
+  }
+}

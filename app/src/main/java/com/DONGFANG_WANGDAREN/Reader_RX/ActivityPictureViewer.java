@@ -99,17 +99,10 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private static final String OPEN_MODE_INSTALLER_BLOCKED = "installer_blocked";
     private static final String OPEN_MODE_EXTERNAL = "external";
     private static final String OPEN_MODE_UNSUPPORTED = "unsupported";
-    private static final String HISTORY_FILE_NAME = "History.json";
     private static final String JSON_KEY_URI = "uri";
     private static final String JSON_KEY_FILE_NAME = "file_name";
     private static final String JSON_KEY_FILE_PATH = "file_path";
-    private static final int MAX_HISTORY_RECORDS = 20;
     private static final int TEXT_QUICK_SCROLL_MAX = 1000;
-    private static final int TEXT_PREVIEW_INITIAL_CHARACTERS = 24 * 1024;
-    private static final int LARGE_TEXT_INTERACTION_THRESHOLD = 512 * 1024;
-    private static final float DEFAULT_TEXT_SIZE_SP = 14f;
-    private static final float MIN_TEXT_SIZE_SP = 10f;
-    private static final float MAX_TEXT_SIZE_SP = 30f;
 
     private ActivityResultLauncher<String[]> launcherOpenDocument;
     private ActivityResultLauncher<Uri> launcherOpenDocumentTree;
@@ -171,7 +164,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private boolean convertingPmg;
     private boolean updatingTextQuickScrollFromCode;
     private boolean startupIntentHandled;
-    private float currentTextSizeSp = DEFAULT_TEXT_SIZE_SP;
+    private float currentTextSizeSp = AppConfig.get().getDefaultTextSizeSp();
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -1021,7 +1014,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         currentTextSupportsPrettyPrint = isStructuredTextFileName(currentFileName);
         currentTextPrettyPrinted = false;
         markdownPreviewMode = false;
-        currentTextSizeSp = DEFAULT_TEXT_SIZE_SP;
+        currentTextSizeSp = AppConfig.get().getDefaultTextSizeSp();
         viewPictureZoom.setImageDrawable(null);
         viewPictureZoom.setVisibility(View.GONE);
         playerViewFile.setVisibility(View.GONE);
@@ -1070,7 +1063,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
             }
         }
         historyRecords.add(0, new HistoryRecord(uriString, fileName, filePath));
-        while (historyRecords.size() > MAX_HISTORY_RECORDS) {
+        while (historyRecords.size() > AppConfig.get().getMaxHistoryRecords()) {
             historyRecords.remove(historyRecords.size() - 1);
         }
         saveHistoryRecords();
@@ -1314,7 +1307,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
             currentTextSupportsPrettyPrint = false;
             currentTextPrettyPrinted = false;
             markdownPreviewMode = false;
-            currentTextSizeSp = DEFAULT_TEXT_SIZE_SP;
+            currentTextSizeSp = AppConfig.get().getDefaultTextSizeSp();
             searchMatchStarts.clear();
             searchMatchEnds.clear();
             currentSearchIndex = -1;
@@ -1404,7 +1397,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
                 throw new FileNotFoundException("Input stream is null.");
             }
             ReaderTextPlain.PreviewTextResult previewTextResult =
-                    ReaderTextPlain.readUtf8Preview(previewInputStream, TEXT_PREVIEW_INITIAL_CHARACTERS);
+                    ReaderTextPlain.readUtf8Preview(previewInputStream, AppConfig.get().getTextPreviewInitialCharacters());
             runOnUiThread(() -> {
                 if (!isActiveOpenRequest(requestId)) {
                     return;
@@ -1675,7 +1668,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
 
     @NonNull
     private File getHistoryFile() {
-        return new File(AppStoragePaths.resolveHistoryDirectory(this), HISTORY_FILE_NAME);
+        return new File(AppStoragePaths.resolveHistoryDirectory(this), AppConfig.get().getHistoryFileName());
     }
 
     private void togglePrettyPrint() {
@@ -1735,13 +1728,13 @@ public class ActivityPictureViewer extends AppCompatActivity {
     }
 
     private void adjustTextSize(float deltaSp) {
-        currentTextSizeSp = Math.max(MIN_TEXT_SIZE_SP, Math.min(MAX_TEXT_SIZE_SP, currentTextSizeSp + deltaSp));
+        currentTextSizeSp = Math.max(AppConfig.get().getMinTextSizeSp(), Math.min(AppConfig.get().getMaxTextSizeSp(), currentTextSizeSp + deltaSp));
         applyCurrentTextZoom();
     }
 
     private void applyCurrentTextZoom() {
         textViewFileContent.setTextSize(currentTextSizeSp);
-        int textZoom = Math.round((currentTextSizeSp / DEFAULT_TEXT_SIZE_SP) * 100f);
+        int textZoom = Math.round((currentTextSizeSp / AppConfig.get().getDefaultTextSizeSp()) * 100f);
         webViewMarkdownPreview.getSettings().setTextZoom(textZoom);
         scheduleTextQuickScrollUpdate();
     }
@@ -2016,7 +2009,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
     }
 
     private boolean isLargeTextContent(@NonNull String textContent) {
-        return textContent.length() >= LARGE_TEXT_INTERACTION_THRESHOLD;
+        return textContent.length() >= AppConfig.get().getLargeTextInteractionThreshold();
     }
 
     @Override

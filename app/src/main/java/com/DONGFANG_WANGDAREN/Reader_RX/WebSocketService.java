@@ -43,13 +43,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class WebSocketService extends Service {
 
     private static final String TAG = "WebSocketService";
-    private static final int WEBSOCKET_PORT = 8080;
-    private static final int HTTP_PORT = 8081;
-    private static final String SENDER_APP = "Reader RX";
-    private static final String SENDER_SYSTEM = "System";
-    private static final String MESSAGE_TYPE_TEXT = "text";
-    private static final String MESSAGE_TYPE_IMAGE = "image";
-    private static final String IMAGE_URL_PREFIX = "/images/";
 
     private final IBinder binder = new LocalBinder();
     private final CopyOnWriteArrayList<EventListener> listeners = new CopyOnWriteArrayList<>();
@@ -70,9 +63,16 @@ public class WebSocketService extends Service {
     @Nullable
     private BufferedWriter chatWriter;
     private final Object chatWriterLock = new Object();
-    private final SimpleDateFormat chatDateFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
-    private final SimpleDateFormat chatTimeFormat = new SimpleDateFormat("HH-mm-ss", Locale.US);
-    private final SimpleDateFormat chatLogTimeFormat = new SimpleDateFormat("HH:mm:ss", Locale.US);
+    private final SimpleDateFormat chatDateFormat;
+    private final SimpleDateFormat chatTimeFormat;
+    private final SimpleDateFormat chatLogTimeFormat;
+
+    public WebSocketService() {
+        AppConfig config = AppConfig.get();
+        this.chatDateFormat = new SimpleDateFormat(config.getChatDayFolderFormat(), Locale.US);
+        this.chatTimeFormat = new SimpleDateFormat(config.getChatFileNameFormat(), Locale.US);
+        this.chatLogTimeFormat = new SimpleDateFormat(config.getChatLogTimeFormat(), Locale.US);
+    }
 
     public interface EventListener {
         void onServerStarted(@NonNull String address);
@@ -150,7 +150,8 @@ public class WebSocketService extends Service {
             return;
         }
         try {
-            webSocketServer = new ReaderWebSocketServer(new InetSocketAddress(WEBSOCKET_PORT));
+            AppConfig config = AppConfig.get();
+            webSocketServer = new ReaderWebSocketServer(new InetSocketAddress(config.getWebSocketPort()));
             webSocketServer.setReuseAddr(true);
             webSocketServer.start();
             startHttpServer();
@@ -207,13 +208,14 @@ public class WebSocketService extends Service {
             AppLogger.e(TAG, "Failed to create chat day directory: " + dayDirectory.getAbsolutePath());
             return;
         }
-        String time = chatTimeFormat.format(new Date());
-        String baseName = "Chat_" + time + "_" + date;
-        File file = new File(dayDirectory, baseName + ".txt");
-        int suffix = 1;
+        String baseName = chatTimeFormat.format(new Date());
+        String extension = AppConfig.get().getChatFileExtension();
+        String suffix = extension.startsWith(".") ? extension : "." + extension;
+        File file = new File(dayDirectory, baseName + suffix);
+        int index = 1;
         while (file.exists()) {
-            file = new File(dayDirectory, baseName + "_" + suffix + ".txt");
-            suffix++;
+            file = new File(dayDirectory, baseName + "_" + index + suffix);
+            index++;
         }
         try {
             synchronized (chatWriterLock) {
@@ -293,7 +295,7 @@ public class WebSocketService extends Service {
         if (ipAddress == null) {
             return null;
         }
-        return "ws://" + ipAddress + ":" + WEBSOCKET_PORT;
+        return "ws://" + ipAddress + ":" + AppConfig.get().getWebSocketPort();
     }
 
     @Nullable
@@ -302,7 +304,7 @@ public class WebSocketService extends Service {
         if (ipAddress == null) {
             return null;
         }
-        return "http://" + ipAddress + ":" + HTTP_PORT;
+        return "http://" + ipAddress + ":" + AppConfig.get().getHttpPort();
     }
 
     private void startHttpServer() {
@@ -310,7 +312,7 @@ public class WebSocketService extends Service {
             return;
         }
         try {
-            httpServer = new ReaderHttpServer(HTTP_PORT);
+            httpServer = new ReaderHttpServer(AppConfig.get().getHttpPort());
             httpServer.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false);
         } catch (Exception exception) {
             log("Failed to start HTTP server: " + exception.getMessage());
@@ -326,20 +328,23 @@ public class WebSocketService extends Service {
     }
 
     public void sendCustomMessage(@NonNull String message) {
-        String payload = buildChatMessage(SENDER_APP, message, false);
+        String sender = AppConfig.get().getSenderApp();
+        String payload = buildChatMessage(sender, message, false);
         broadcastMessage(payload);
-        log("[" + SENDER_APP + "] " + message);
+        log("[" + sender + "] " + message);
     }
 
     public void sendImageMessage(@NonNull String imageUrl) {
-        String payload = buildChatMessage(SENDER_APP, getString(R.string.websocket_image_label), false, MESSAGE_TYPE_IMAGE, imageUrl);
+        String sender = AppConfig.get().getSenderApp();
+        String label = getString(R.string.websocket_image_label);
+        String payload = buildChatMessage(sender, label, false, AppConfig.get().getMessageTypeImage(), imageUrl);
         broadcastMessage(payload);
-        log("[" + SENDER_APP + "] " + getString(R.string.websocket_image_label));
+        log("[" + sender + "] " + label);
     }
 
     @NonNull
     private String buildChatMessage(@NonNull String sender, @NonNull String message, boolean isSystem) {
-        return buildChatMessage(sender, message, isSystem, MESSAGE_TYPE_TEXT, null);
+        return buildChatMessage(sender, message, isSystem, AppConfig.get().getMessageTypeText(), null);
     }
 
     @NonNull
@@ -372,7 +377,7 @@ public class WebSocketService extends Service {
     private void notifyImageMessageIfNeeded(@NonNull String message) {
         try {
             JSONObject jsonObject = new JSONObject(message);
-            if (MESSAGE_TYPE_IMAGE.equals(jsonObject.optString("type")) && jsonObject.has("url")) {
+            if (AppConfig.get().getMessageTypeImage().equals(jsonObject.optString("type")) && jsonObject.has("url")) {
                 String sender = jsonObject.optString("from", "Unknown");
                 String url = jsonObject.optString("url", "");
                 if (!url.isEmpty()) {
@@ -463,8 +468,9 @@ public class WebSocketService extends Service {
         @Override
         public Response serve(@NonNull IHTTPSession session) {
             String uri = session.getUri();
-            if (uri != null && uri.startsWith(IMAGE_URL_PREFIX)) {
-                return serveImage(uri);
+            String imagePrefix = AppConfig.get().getImageUrlPrefix();
+            if (uri != null && uri.startsWith(imagePrefix)) {
+                return serveImage(uri, imagePrefix);
             }
             String html = buildHtmlPage();
             byte[] bytes = html.getBytes(StandardCharsets.UTF_8);
@@ -472,8 +478,8 @@ public class WebSocketService extends Service {
         }
 
         @NonNull
-        private Response serveImage(@NonNull String uri) {
-            String fileName = uri.substring(IMAGE_URL_PREFIX.length());
+        private Response serveImage(@NonNull String uri, @NonNull String prefix) {
+            String fileName = uri.substring(prefix.length());
             if (fileName.isEmpty() || fileName.contains("..") || fileName.contains("/")) {
                 return newFixedLengthResponse(Response.Status.BAD_REQUEST, NanoHTTPD.MIME_PLAINTEXT, "Invalid image name.");
             }
@@ -517,7 +523,7 @@ public class WebSocketService extends Service {
     private String buildHtmlPage() {
         String wsAddress = getServerAddress();
         if (wsAddress == null) {
-            wsAddress = "ws://" + getLocalIpAddress() + ":" + WEBSOCKET_PORT;
+            wsAddress = "ws://" + getLocalIpAddress() + ":" + AppConfig.get().getWebSocketPort();
         }
         return "<!DOCTYPE html>"
                 + "<html><head>"
@@ -574,7 +580,7 @@ public class WebSocketService extends Service {
             clientNames.put(conn, userName);
             setConnectedClientCount(getConnections().size());
             log("Client connected: " + userName + " @ " + conn.getRemoteSocketAddress() + " (total: " + connectedClientCount + ")");
-            String joinMessage = buildChatMessage(SENDER_SYSTEM, userName + " 进入聊天室", true);
+            String joinMessage = buildChatMessage(AppConfig.get().getSenderSystem(), userName + " 进入聊天室", true);
             broadcastMessage(joinMessage);
         }
 
@@ -584,7 +590,7 @@ public class WebSocketService extends Service {
             setConnectedClientCount(getConnections().size());
             log("Client disconnected: " + (userName != null ? userName : conn.getRemoteSocketAddress()) + " (total: " + connectedClientCount + ")");
             if (userName != null) {
-                String leaveMessage = buildChatMessage(SENDER_SYSTEM, userName + " 离开聊天室", true);
+                String leaveMessage = buildChatMessage(AppConfig.get().getSenderSystem(), userName + " 离开聊天室", true);
                 broadcastMessage(leaveMessage);
             }
         }

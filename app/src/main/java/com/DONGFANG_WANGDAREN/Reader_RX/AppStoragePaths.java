@@ -42,7 +42,7 @@ public final class AppStoragePaths {
 
     @NonNull
     public static File resolveLogsDirectory(@NonNull Context context) {
-        File directory = new File(resolveBaseDirectory(context), "Log");
+        File directory = new File(resolveBaseDirectory(context), AppConfig.get().getLogsFolder());
         if (!directory.exists()) {
             directory.mkdirs();
         }
@@ -51,7 +51,7 @@ public final class AppStoragePaths {
 
     @NonNull
     public static File resolveHistoryDirectory(@NonNull Context context) {
-        File directory = new File(resolveBaseDirectory(context), "History");
+        File directory = new File(resolveBaseDirectory(context), AppConfig.get().getHistoryFolder());
         if (!directory.exists()) {
             directory.mkdirs();
         }
@@ -60,7 +60,7 @@ public final class AppStoragePaths {
 
     @NonNull
     public static File resolveWebSocketChatDirectory(@NonNull Context context) {
-        File directory = new File(resolveBaseDirectory(context), "WebSocket/Chat");
+        File directory = new File(resolveBaseDirectory(context), AppConfig.get().getWebSocketChatFolder());
         if (!directory.exists()) {
             directory.mkdirs();
         }
@@ -69,7 +69,7 @@ public final class AppStoragePaths {
 
     @NonNull
     public static File resolveWebSocketChatImagesDirectory(@NonNull Context context) {
-        File directory = new File(resolveWebSocketChatDirectory(context), "Images");
+        File directory = new File(resolveWebSocketChatDirectory(context), AppConfig.get().getWebSocketChatImagesFolder());
         if (!directory.exists()) {
             directory.mkdirs();
         }
@@ -93,6 +93,10 @@ public final class AppStoragePaths {
 
     @NonNull
     private static String buildAppFolderName(@NonNull Context context) {
+        String configName = AppConfig.get().getAppFolderName();
+        if (configName != null && !configName.trim().isEmpty()) {
+            return configName.trim().replace("/", "_");
+        }
         CharSequence applicationLabel = context.getApplicationInfo().loadLabel(context.getPackageManager());
         String normalized = applicationLabel == null ? "Reader RX" : applicationLabel.toString().trim();
         if (normalized.isEmpty()) {

@@ -169,15 +169,16 @@ public final class AppLogger {
             return null;
         }
 
+        AppConfig config = AppConfig.get();
         File logsDirectory = AppStoragePaths.resolveLogsDirectory(context);
         Date now = new Date();
-        File dayDirectory = new File(logsDirectory, format(now, "yyyy-MM-dd"));
+        File dayDirectory = new File(logsDirectory, format(now, config.getLogDayFolderFormat()));
         if (!ensureDirectory(dayDirectory)) {
             return null;
         }
 
-        String baseName = "Log_" + format(now, "HH-mm") + "_" + format(now, "yyyy-MM-dd");
-        File logFile = findUniqueLogFile(dayDirectory, baseName);
+        String baseName = format(now, config.getLogFileNameFormat());
+        File logFile = findUniqueLogFile(dayDirectory, baseName, config.getLogFileExtension());
         try {
             if (!logFile.exists() && !logFile.createNewFile()) {
                 return null;
@@ -193,20 +194,21 @@ public final class AppLogger {
     }
 
     @NonNull
-    private static File findUniqueLogFile(@NonNull File directory, @NonNull String baseName) {
-        File candidate = new File(directory, baseName + ".txt");
+    private static File findUniqueLogFile(@NonNull File directory, @NonNull String baseName, @NonNull String extension) {
+        String suffix = extension.startsWith(".") ? extension : "." + extension;
+        File candidate = new File(directory, baseName + suffix);
         if (!candidate.exists()) {
             return candidate;
         }
         int index = 1;
         while (true) {
-            candidate = new File(directory, baseName + "_" + index + ".txt");
+            candidate = new File(directory, baseName + "_" + index + suffix);
             if (!candidate.exists()) {
                 return candidate;
             }
             index++;
             if (index > 9999) {
-                return new File(directory, baseName + "_" + System.currentTimeMillis() + ".txt");
+                return new File(directory, baseName + "_" + System.currentTimeMillis() + suffix);
             }
         }
     }

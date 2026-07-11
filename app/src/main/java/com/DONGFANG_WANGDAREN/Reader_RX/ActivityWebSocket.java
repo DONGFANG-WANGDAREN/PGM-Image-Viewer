@@ -57,8 +57,6 @@ public class ActivityWebSocket extends AppCompatActivity {
     private WebSocketService webSocketService;
     private boolean serviceBound;
 
-    private final SimpleDateFormat imageFileTimeFormat = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US);
-
     private final ActivityResultLauncher<String> imagePickerLauncher = registerForActivityResult(
             new ActivityResultContracts.GetContent(),
             result -> {
@@ -277,15 +275,16 @@ public class ActivityWebSocket extends AppCompatActivity {
             showToast(R.string.websocket_image_url_failed);
             return;
         }
-        String imageUrl = httpAddress + "/images/" + imageFile.getName();
+        String imageUrl = httpAddress + AppConfig.get().getImageUrlPrefix() + imageFile.getName();
         webSocketService.sendImageMessage(imageUrl);
     }
 
     @Nullable
     private File copyUriToChatImages(@NonNull Uri sourceUri) {
         File imagesDirectory = AppStoragePaths.resolveWebSocketChatImagesDirectory(this);
+        AppConfig config = AppConfig.get();
         String extension = resolveImageExtension(sourceUri);
-        String baseName = "Chat_" + imageFileTimeFormat.format(new Date());
+        String baseName = new SimpleDateFormat(config.getChatImageFileNameFormat(), Locale.US).format(new Date());
         File destinationFile = new File(imagesDirectory, baseName + extension);
         int suffix = 1;
         while (destinationFile.exists()) {

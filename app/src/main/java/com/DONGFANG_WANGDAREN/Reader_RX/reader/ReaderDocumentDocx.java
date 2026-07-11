@@ -1,5 +1,7 @@
-package com.DONGFANG_WANGDAREN.Reader_RX;
+package com.DONGFANG_WANGDAREN.Reader_RX.reader;
 
+
+import com.DONGFANG_WANGDAREN.Reader_RX.app.AppLogger;
 import android.util.Xml;
 
 import androidx.annotation.NonNull;

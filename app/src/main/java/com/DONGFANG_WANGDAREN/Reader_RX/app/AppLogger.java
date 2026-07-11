@@ -1,5 +1,7 @@
-package com.DONGFANG_WANGDAREN.Reader_RX;
+package com.DONGFANG_WANGDAREN.Reader_RX.app;
 
+
+import com.DONGFANG_WANGDAREN.Reader_RX.storage.AppStoragePaths;
 import android.content.Context;
 import android.os.Build;
 import android.os.Process;

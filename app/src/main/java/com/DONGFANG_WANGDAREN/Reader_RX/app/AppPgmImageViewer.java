@@ -1,4 +1,4 @@
-package com.DONGFANG_WANGDAREN.Reader_RX;
+package com.DONGFANG_WANGDAREN.Reader_RX.app;
 
 import android.app.Application;
 

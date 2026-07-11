@@ -1,4 +1,4 @@
-package com.DONGFANG_WANGDAREN.Reader_RX;
+package com.DONGFANG_WANGDAREN.Reader_RX.ui.view;
 
 import android.content.Context;
 import android.graphics.Canvas;

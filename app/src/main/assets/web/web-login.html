@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader RX Web Login</title>
+<style>
+body{font-family:sans-serif;background:#0f172a;color:#f8fafc;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:16px;box-sizing:border-box;}
+.box{background:#1e293b;padding:32px;border-radius:12px;max-width:380px;width:100%;text-align:center;box-shadow:0 10px 25px rgba(0,0,0,0.3);}
+h1{font-size:20px;margin:0 0 16px;}
+p{color:#94a3b8;font-size:14px;margin-bottom:12px;line-height:1.5;}
+.url{background:#334155;padding:12px;border-radius:8px;word-break:break-all;margin-bottom:16px;}
+.url strong{color:#f8fafc;font-size:15px;}
+#qr{width:240px;height:240px;background:#fff;border-radius:8px;margin:0 auto 16px;}
+#status{font-size:13px;color:#94a3b8;}
+</style>
+</head>
+<body>
+<div class="box">
+<h1>Reader RX Web Login</h1>
+<p>在另一台设备上打开以下网址，然后用本 App 的“扫码登录”扫描页面中的二维码。</p>
+<div class="url"><strong id="loginUrl">Loading...</strong></div>
+<div id="qr"><img id="qrImage" src="" style="width:100%;height:100%;border-radius:8px;"></div>
+<div id="status">等待扫码...</div>
+</div>
+<script>
+async function init(){
+  try{
+    const r=await fetch('/api/web-login-session');
+    const d=await r.json();
+    const sessionId=d.sessionId;
+    const token=d.token;
+    const loginUrl=d.loginUrl;
+    const qrData='rrx://login?session='+encodeURIComponent(sessionId)+'&token='+encodeURIComponent(token);
+    const qrImageUrl='/api/qr.png?data='+encodeURIComponent(qrData);
+    document.getElementById('loginUrl').textContent=loginUrl;
+    document.getElementById('qrImage').src=qrImageUrl;
+    setInterval(function(){check(sessionId);},2000);
+  }catch(e){
+    document.getElementById('status').textContent='加载失败: '+e;
+  }
+}
+async function check(sessionId){
+  try{
+    const r=await fetch('/api/session-status?session='+encodeURIComponent(sessionId));
+    const d=await r.json();
+    if(d.authenticated){window.location.href='/files';return;}
+    document.getElementById('status').textContent='等待扫码...';
+  }catch(e){
+    document.getElementById('status').textContent='连接错误';
+  }
+}
+init();
+</script>
+</body>
+</html>

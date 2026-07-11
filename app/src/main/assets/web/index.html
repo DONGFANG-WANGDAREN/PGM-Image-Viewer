@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader RX WebSocket</title>
+<style>
+body{font-family:sans-serif;margin:16px;background:#0f172a;color:#f8fafc;line-height:1.5;}
+h1{font-size:20px;margin-bottom:8px;}
+#status{font-size:14px;color:#94a3b8;margin-bottom:12px;}
+#log{white-space:pre-wrap;background:#1e293b;border-radius:8px;padding:12px;font-family:monospace;font-size:13px;height:calc(100vh - 180px);overflow-y:auto;}
+#sendBox{display:flex;gap:8px;margin-top:12px;}
+#msg{flex:1;padding:8px 12px;border-radius:6px;border:none;background:#334155;color:#f8fafc;}
+button{padding:8px 16px;border:none;border-radius:6px;background:#22c55e;color:#fff;cursor:pointer;}
+nav{margin-bottom:12px;}
+nav a{color:#60a5fa;margin-right:12px;text-decoration:none;}
+</style>
+</head>
+<body>
+<nav><a href="/files">File Manager</a><a href="/chat">Chat</a></nav>
+<h1>Reader RX WebSocket Monitor</h1>
+<div id="status">Loading config...</div>
+<div id="log"></div>
+<div id="sendBox">
+<input id="msg" type="text" placeholder="Send message...">
+<button onclick="send()">Send</button>
+</div>
+<script>
+function getQueryParam(key){const params=new URLSearchParams(window.location.search);return params.get(key);}
+function generateName(){return 'Browser-'+Math.floor(Math.random()*10000).toString().padStart(4,'0');}
+const userName=(getQueryParam('name')||'').trim()||generateName();
+const logEl=document.getElementById('log');
+const statusEl=document.getElementById('status');
+function append(text,isImage,imageUrl){const d=new Date();const t=d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')+':'+d.getSeconds().toString().padStart(2,'0');const line=document.createElement('div');line.style.marginBottom='6px';line.textContent='['+t+'] '+text;if(isImage&&imageUrl){const img=document.createElement('img');img.src=imageUrl;img.style.maxWidth='200px';img.style.maxHeight='200px';img.style.display='block';img.style.marginTop='4px';img.style.borderRadius='4px';line.appendChild(img);}logEl.appendChild(line);logEl.scrollTop=logEl.scrollHeight;}
+function formatPayload(raw){try{const data=JSON.parse(raw);const prefix=data.system?'[System]':('['+data.from+']');if(data.type==='image'&&data.url){append(prefix+' '+data.message,true,data.url);return;}if(data.from!==undefined&&data.message!==undefined){append(prefix+' '+data.message+(data.clients!==undefined?' (clients:'+data.clients+')':''),false,null);return;}append(raw,false,null);}catch(e){append(raw,false,null);}}
+function connect(wsAddress){
+  const wsUrl=wsAddress+(wsAddress.includes('?')?'&':'?')+'name='+encodeURIComponent(userName);
+  const ws=new WebSocket(wsUrl);
+  ws.onopen=function(){statusEl.textContent='Connected as '+userName+' to '+wsAddress;append('Connected as '+userName+'.',false,null);};
+  ws.onmessage=function(e){formatPayload(e.data);};
+  ws.onclose=function(){statusEl.textContent='Disconnected. Reconnecting...';append('Disconnected. Reconnecting...',false,null);setTimeout(function(){connect(wsAddress);},2000);};
+  ws.onerror=function(e){append('Error: '+e.type,false,null);};
+  window.send=function(){const input=document.getElementById('msg');const text=input.value.trim();if(text&&ws.readyState===1){ws.send(text);input.value='';}};
+}
+async function init(){
+  try{
+    const r=await fetch('/api/config');
+    const d=await r.json();
+    const wsAddress=d.wsAddress;
+    statusEl.textContent='Connecting to '+wsAddress+' ...';
+    connect(wsAddress);
+  }catch(e){
+    statusEl.textContent='Failed to load config: '+e;
+    append('Failed to load config: '+e,false,null);
+  }
+}
+document.getElementById('msg').addEventListener('keypress',function(e){if(e.key==='Enter')send();});
+init();
+</script>
+</body>
+</html>

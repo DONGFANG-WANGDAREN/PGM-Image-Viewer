@@ -1,5 +1,8 @@
-package com.DONGFANG_WANGDAREN.Reader_RX;
+package com.DONGFANG_WANGDAREN.Reader_RX.ui.adapter;
 
+
+import com.DONGFANG_WANGDAREN.Reader_RX.R;
+import com.DONGFANG_WANGDAREN.Reader_RX.ui.activity.ActivityTools;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,7 +17,7 @@ public final class ToolsAdapter extends RecyclerView.Adapter<ToolsAdapter.ViewHo
 
     private final List<ActivityTools.ToolItem> items;
 
-    ToolsAdapter(@NonNull List<ActivityTools.ToolItem> items) {
+    public ToolsAdapter(@NonNull List<ActivityTools.ToolItem> items) {
         this.items = items;
     }
 

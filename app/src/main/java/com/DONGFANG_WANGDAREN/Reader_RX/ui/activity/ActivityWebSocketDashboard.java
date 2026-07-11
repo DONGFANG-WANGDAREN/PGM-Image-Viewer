@@ -1,5 +1,9 @@
-package com.DONGFANG_WANGDAREN.Reader_RX;
+package com.DONGFANG_WANGDAREN.Reader_RX.ui.activity;
 
+
+import com.DONGFANG_WANGDAREN.Reader_RX.R;
+import com.DONGFANG_WANGDAREN.Reader_RX.app.AppLogger;
+import com.DONGFANG_WANGDAREN.Reader_RX.websocket.WebSocketService;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;

@@ -83,6 +83,7 @@ From the web interface you can:
 - View detailed device information.
 - Browse files in external storage.
 - Download files or view text and image files online.
+- Upload files from the browser to the current folder.
 
 The browser session is authenticated with a randomly generated token stored in a cookie. Each QR code is single-use and expires after a few minutes if not scanned.
 

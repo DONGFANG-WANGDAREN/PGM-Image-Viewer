@@ -1,5 +1,7 @@
-package com.DONGFANG_WANGDAREN.Reader_RX;
+package com.DONGFANG_WANGDAREN.Reader_RX.ui.view;
 
+
+import com.DONGFANG_WANGDAREN.Reader_RX.app.AppLogger;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Matrix;

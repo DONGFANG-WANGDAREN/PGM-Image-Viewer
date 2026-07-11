@@ -1,4 +1,4 @@
-package com.DONGFANG_WANGDAREN.Reader_RX;
+package com.DONGFANG_WANGDAREN.Reader_RX.websocket;
 
 import android.content.Context;
 import android.net.ConnectivityManager;

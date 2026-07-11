@@ -1,5 +1,16 @@
-package com.DONGFANG_WANGDAREN.Reader_RX;
+package com.DONGFANG_WANGDAREN.Reader_RX.ui.activity;
 
+
+import com.DONGFANG_WANGDAREN.Reader_RX.R;
+import com.DONGFANG_WANGDAREN.Reader_RX.app.AppConfig;
+import com.DONGFANG_WANGDAREN.Reader_RX.app.AppLogger;
+import com.DONGFANG_WANGDAREN.Reader_RX.storage.AppStoragePaths;
+import com.DONGFANG_WANGDAREN.Reader_RX.reader.ParserPicturePgm;
+import com.DONGFANG_WANGDAREN.Reader_RX.reader.ReaderDocumentDocx;
+import com.DONGFANG_WANGDAREN.Reader_RX.reader.ReaderTableExcel;
+import com.DONGFANG_WANGDAREN.Reader_RX.reader.ReaderTextPlain;
+import com.DONGFANG_WANGDAREN.Reader_RX.ui.view.ViewPictureZoom;
+import com.DONGFANG_WANGDAREN.Reader_RX.ui.view.ViewSeekBarVertical;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;

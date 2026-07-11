@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader RX File Manager</title>
+<style>
+body{font-family:sans-serif;margin:16px;background:#0f172a;color:#f8fafc;}
+h1{font-size:20px;margin-bottom:8px;}
+nav{margin-bottom:16px;}
+nav a{color:#60a5fa;margin-right:12px;text-decoration:none;}
+#device{background:#1e293b;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;line-height:1.6;}
+#device h2{font-size:16px;margin:0 0 8px;}
+#device table{width:100%;border-collapse:collapse;}
+#device td{padding:4px 8px;border-bottom:1px solid #334155;}
+#device td:first-child{color:#94a3b8;width:40%;}
+#pathBar{background:#1e293b;border-radius:8px;padding:10px 12px;margin-bottom:12px;word-break:break-all;font-size:13px;}
+#pathBar a{color:#60a5fa;text-decoration:none;margin-right:4px;}
+#list{background:#1e293b;border-radius:8px;overflow:hidden;}
+.item{display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid #334155;cursor:pointer;}
+.item:hover{background:#334155;}
+.item:last-child{border-bottom:none;}
+.icon{width:24px;text-align:center;margin-right:10px;font-size:16px;}
+.name{flex:1;word-break:break-all;font-size:14px;}
+.meta{color:#94a3b8;font-size:12px;text-align:right;white-space:nowrap;margin-left:8px;}
+.actions a{color:#60a5fa;text-decoration:none;margin-left:10px;font-size:12px;}
+#preview{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);display:none;align-items:center;justify-content:center;z-index:1000;flex-direction:column;}
+#previewContent{max-width:90%;max-height:80%;overflow:auto;background:#1e293b;border-radius:8px;padding:16px;}
+#preview img{max-width:100%;max-height:70vh;}
+#preview pre{white-space:pre-wrap;word-break:break-all;font-family:monospace;font-size:13px;}
+#previewClose{position:absolute;top:16px;right:16px;color:#fff;font-size:24px;cursor:pointer;}
+#uploadBar{margin-bottom:12px;}
+#uploadButton{padding:8px 16px;border:none;border-radius:6px;background:#22c55e;color:#fff;cursor:pointer;font-size:14px;}
+</style>
+</head>
+<body>
+<nav><a href="/files">File Manager</a><a href="#device">Android</a></nav>
+<h1>File Manager</h1>
+<div id="device"><h2>Device Info</h2><div id="deviceContent">Loading...</div></div>
+<div id="pathBar"></div>
+<div id="uploadBar"><button id="uploadButton" onclick="selectUpload()">Upload</button><input type="file" id="uploadInput" style="display:none" onchange="doUpload()"></div>
+<div id="list">Loading...</div>
+<div id="preview"><div id="previewClose" onclick="closePreview()">&times;</div><div id="previewContent"></div></div>
+<script>
+let currentPath='';
+function selectUpload(){document.getElementById('uploadInput').click();}
+async function doUpload(){const input=document.getElementById('uploadInput');if(!input.files.length)return;const file=input.files[0];const form=new FormData();form.append('path',currentPath);form.append('file',file);try{const r=await fetch('/api/upload',{method:'POST',body:form});const d=await r.json();if(d.success){loadFileList(currentPath);}else{alert('Upload failed');}}catch(e){alert('Upload error: '+e);}input.value='';}
+function formatBytes(b){if(b<1024)return b+' B';if(b<1024*1024)return (b/1024).toFixed(2)+' KB';return (b/(1024*1024)).toFixed(2)+' MB';}
+async function loadDevice(){try{const r=await fetch('/api/device');const d=await r.json();let html='<table>';
+html+='<tr><td>Model</td><td>'+escape(d.manufacturer+' '+d.model)+'</td></tr>';
+html+='<tr><td>Android</td><td>'+escape(d.androidVersion)+' (SDK '+d.sdk+')</td></tr>';
+if(d.display){html+='<tr><td>Display</td><td>'+d.display.widthPixels+' x '+d.display.heightPixels+' @ '+d.display.densityDpi+'dpi</td></tr>';}
+if(d.memory){html+='<tr><td>RAM</td><td>Total '+formatBytes(d.memory.totalRam)+', Available '+formatBytes(d.memory.availableRam)+'</td></tr>';
+html+='<tr><td>Storage</td><td>Total '+formatBytes(d.memory.totalStorage)+', Available '+formatBytes(d.memory.availableStorage)+'</td></tr>';}
+if(d.battery){html+='<tr><td>Battery</td><td>'+d.battery.level+'%'+(d.battery.plugged>0?' (charging)':'')+'</td></tr>';}
+if(d.cpu){html+='<tr><td>CPU</td><td>'+d.cpu.cores+' cores, '+(d.cpu.usage>=0?d.cpu.usage.toFixed(2)+'%':'N/A')+'</td></tr>';}
+if(d.network){html+='<tr><td>Network</td><td>IP '+escape(d.network.localIp)+(d.network.wifiConnected?' · WiFi '+d.network.wifiLinkSpeedMbps+'Mbps · '+d.network.wifiSignalDbm+'dBm':'')+'</td></tr>';}
+html+='</table>';document.getElementById('deviceContent').innerHTML=html;}catch(e){document.getElementById('deviceContent').textContent='Error loading device info.';}}
+function escape(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
+function buildPathBar(path){const parts=path.split('/').filter(Boolean);let html='<a href="#" onclick="loadFileList(&quot;&quot;);return false;">Storage</a>';let acc='';for(let p of parts){acc+='/'+p;html+='/';html+='<a href="#" onclick="loadFileList(&quot;'+escape(acc)+'&quot;);return false;">'+escape(p)+'</a>';}document.getElementById('pathBar').innerHTML=html;}
+async function loadFileList(path){currentPath=path||'';try{const r=await fetch('/api/files?path='+encodeURIComponent(currentPath));const d=await r.json();buildPathBar(d.path);let html='';if(d.parent){html+='<div class="item" onclick="loadFileList(&quot;'+escape(d.parent)+'&quot;)"><span class="icon">&#8593;</span><span class="name">..</span></div>';}
+for(const f of d.files){if(f.directory){html+='<div class="item" onclick="loadFileList(&quot;'+escape(f.path)+'&quot;)"><span class="icon">&#128193;</span><span class="name">'+escape(f.name)+'</span><span class="meta">'+f.modified+'</span></div>';}
+else{html+='<div class="item" onclick="viewFile(&quot;'+escape(f.path)+'&quot;,&quot;'+escape(f.name)+'&quot;)"><span class="icon">&#128196;</span><span class="name">'+escape(f.name)+'</span><span class="meta">'+formatBytes(f.size)+' · '+f.modified+'</span><span class="actions" onclick="event.stopPropagation()"><a href="/api/download?path='+encodeURIComponent(f.path)+'" download>Download</a></span></div>';}
+}document.getElementById('list').innerHTML=html||'<div style="padding:12px;color:#94a3b8">Empty folder</div>';}catch(e){document.getElementById('list').textContent='Error loading files.';}}
+async function viewFile(path,name){const lower=name.toLowerCase();const isImage=/\.(jpg|jpeg|png|gif|webp|bmp|heic|heif)$/.test(lower);const isText=/\.(txt|json|xml|md|java|kt|swift|csv|log|ini|cfg|conf|properties|gradle|css|js|ts|html|htm|yaml|yml)$/.test(lower);const content=document.getElementById('previewContent');if(isImage){content.innerHTML='<img src="/api/view?path='+encodeURIComponent(path)+'" alt="'+escape(name)+'">';}
+else if(isText){try{const r=await fetch('/api/view?path='+encodeURIComponent(path));const t=await r.text();content.innerHTML='<pre>'+escape(t)+'</pre>';}catch(e){content.textContent='Error reading file.';}}
+else{content.innerHTML='<p>Preview not available. Use Download.</p><a href="/api/download?path='+encodeURIComponent(path)+'" download>Download '+escape(name)+'</a>';}
+document.getElementById('preview').style.display='flex';}
+function closePreview(){document.getElementById('preview').style.display='none';document.getElementById('previewContent').innerHTML='';}
+loadDevice();loadFileList();
+</script>
+</body>
+</html>

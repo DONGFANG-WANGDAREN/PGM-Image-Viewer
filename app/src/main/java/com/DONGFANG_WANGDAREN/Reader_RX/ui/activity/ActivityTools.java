@@ -1,5 +1,11 @@
-package com.DONGFANG_WANGDAREN.Reader_RX;
+package com.DONGFANG_WANGDAREN.Reader_RX.ui.activity;
 
+
+import com.DONGFANG_WANGDAREN.Reader_RX.R;
+import com.DONGFANG_WANGDAREN.Reader_RX.app.AppConfig;
+import com.DONGFANG_WANGDAREN.Reader_RX.app.AppLogger;
+import com.DONGFANG_WANGDAREN.Reader_RX.ui.adapter.ToolsAdapter;
+import com.DONGFANG_WANGDAREN.Reader_RX.websocket.WebSocketService;
 import android.Manifest;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -197,14 +203,14 @@ public class ActivityTools extends AppCompatActivity {
         }
     }
 
-    static final class ToolItem {
+    public static final class ToolItem {
 
         @NonNull
-        final String title;
+        public final String title;
         @NonNull
-        final Runnable action;
+        public final Runnable action;
 
-        ToolItem(@NonNull String title, @NonNull Runnable action) {
+        public ToolItem(@NonNull String title, @NonNull Runnable action) {
             this.title = title;
             this.action = action;
         }

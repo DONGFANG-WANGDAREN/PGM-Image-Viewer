@@ -16,7 +16,7 @@
         android:required="false" />
 
     <application
-        android:name=".AppPgmImageViewer"
+        android:name=".app.AppPgmImageViewer"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -32,7 +32,7 @@
             tools:replace="screenOrientation" />
 
         <activity
-            android:name=".ActivityPictureViewer"
+            android:name=".ui.activity.ActivityPictureViewer"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -216,29 +216,29 @@
         </activity>
 
         <activity
-            android:name=".ActivityTools"
+            android:name=".ui.activity.ActivityTools"
             android:exported="false"
             android:label="@string/tools_title"
             android:theme="@style/Theme.PGMImageViewer" />
 
         <activity
-            android:name=".ActivityWebSocket"
+            android:name=".ui.activity.ActivityWebSocket"
             android:exported="false"
             android:label="@string/websocket_title"
             android:theme="@style/Theme.PGMImageViewer" />
         <activity
-            android:name=".ActivityWebSocketDashboard"
+            android:name=".ui.activity.ActivityWebSocketDashboard"
             android:exported="false"
             android:label="@string/tools_dashboard"
             android:theme="@style/Theme.PGMImageViewer" />
         <activity
-            android:name=".ActivityWebSocketStats"
+            android:name=".ui.activity.ActivityWebSocketStats"
             android:exported="false"
             android:label="@string/tools_dashboard_stats"
             android:theme="@style/Theme.PGMImageViewer" />
 
         <service
-            android:name=".WebSocketService"
+            android:name=".websocket.WebSocketService"
             android:exported="false"
             android:foregroundServiceType="remoteMessaging" />
     </application>

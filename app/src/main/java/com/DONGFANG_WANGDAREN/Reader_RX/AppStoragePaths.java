@@ -51,7 +51,25 @@ public final class AppStoragePaths {
 
     @NonNull
     public static File resolveHistoryDirectory(@NonNull Context context) {
-        File directory = new File(resolveBaseDirectory(context), "history");
+        File directory = new File(resolveBaseDirectory(context), "History");
+        if (!directory.exists()) {
+            directory.mkdirs();
+        }
+        return directory;
+    }
+
+    @NonNull
+    public static File resolveWebSocketChatDirectory(@NonNull Context context) {
+        File directory = new File(resolveBaseDirectory(context), "WebSocket/Chat");
+        if (!directory.exists()) {
+            directory.mkdirs();
+        }
+        return directory;
+    }
+
+    @NonNull
+    public static File resolveWebSocketChatImagesDirectory(@NonNull Context context) {
+        File directory = new File(resolveWebSocketChatDirectory(context), "Images");
         if (!directory.exists()) {
             directory.mkdirs();
         }

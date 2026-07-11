@@ -53,4 +53,23 @@
     <string name="text_pretty_raw">原始内容</string>
     <string name="text_zoom_in">字体放大</string>
     <string name="text_zoom_out">字体缩小</string>
+    <string name="open_websocket">WebSocket</string>
+    <string name="websocket_title">WebSocket 服务</string>
+    <string name="websocket_server_address">其他应用可连接的 WebSocket 地址</string>
+    <string name="websocket_browser_address">在浏览器中打开</string>
+    <string name="tools_title">工具</string>
+    <string name="tools_chat_room">聊天室</string>
+    <string name="websocket_start">启动服务</string>
+    <string name="websocket_stop">停止服务</string>
+    <string name="websocket_send">发送</string>
+    <string name="websocket_message_hint">输入消息</string>
+    <string name="websocket_status_stopped">服务已停止</string>
+    <string name="websocket_status_running">服务运行中</string>
+    <string name="websocket_clients">已连接客户端：%1$d</string>
+    <string name="websocket_error_not_connected">未连接。</string>
+    <string name="websocket_image">图片</string>
+    <string name="websocket_image_label">[图片]</string>
+    <string name="websocket_image_copy_failed">保存所选图片失败。</string>
+    <string name="websocket_image_url_failed">获取图片服务地址失败。</string>
+    <string name="websocket_image_open_failed">打开图片失败。</string>
 </resources>

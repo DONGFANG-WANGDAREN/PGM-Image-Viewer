@@ -115,6 +115,17 @@
             android:textColor="@color/white"
             app:backgroundTint="@color/blue_500"
             app:cornerRadius="12dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/button_websocket_image"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:minWidth="0dp"
+            android:text="@string/websocket_image"
+            android:textColor="@color/blue_500"
+            app:cornerRadius="12dp" />
     </LinearLayout>
 
     <FrameLayout

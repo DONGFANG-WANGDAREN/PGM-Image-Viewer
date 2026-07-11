@@ -99,7 +99,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private static final String OPEN_MODE_INSTALLER_BLOCKED = "installer_blocked";
     private static final String OPEN_MODE_EXTERNAL = "external";
     private static final String OPEN_MODE_UNSUPPORTED = "unsupported";
-    private static final String HISTORY_FILE_NAME = "history-records.json";
+    private static final String HISTORY_FILE_NAME = "History.json";
     private static final String JSON_KEY_URI = "uri";
     private static final String JSON_KEY_FILE_NAME = "file_name";
     private static final String JSON_KEY_FILE_PATH = "file_path";
@@ -266,7 +266,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         buttonOpenPgm.setOnClickListener(view -> launcherOpenDocument.launch(new String[]{"*/*"}));
         buttonOpenWebSocket.setOnClickListener(view -> {
             setHistoryPanelVisible(false);
-            startActivity(new Intent(this, ActivityWebSocket.class));
+            startActivity(new Intent(this, ActivityTools.class));
         });
         buttonConvertPmg.setOnClickListener(view -> convertCurrentPgmToPmgFile());
         buttonToggleHistory.setOnClickListener(view -> setHistoryPanelVisible(layoutHistoryPanel.getVisibility() != View.VISIBLE));

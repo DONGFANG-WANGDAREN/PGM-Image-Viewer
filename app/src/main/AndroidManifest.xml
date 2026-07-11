@@ -199,6 +199,12 @@
         </activity>
 
         <activity
+            android:name=".ActivityTools"
+            android:exported="false"
+            android:label="@string/tools_title"
+            android:theme="@style/Theme.PGMImageViewer" />
+
+        <activity
             android:name=".ActivityWebSocket"
             android:exported="false"
             android:label="@string/websocket_title"

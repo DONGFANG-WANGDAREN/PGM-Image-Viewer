@@ -42,7 +42,7 @@ public final class AppStoragePaths {
 
     @NonNull
     public static File resolveLogsDirectory(@NonNull Context context) {
-        File directory = new File(resolveBaseDirectory(context), "log");
+        File directory = new File(resolveBaseDirectory(context), "Log");
         if (!directory.exists()) {
             directory.mkdirs();
         }

@@ -364,6 +364,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         if (startupIntentHandled) {
             return;
         }
+        AppLogger.refreshStorageLocation(this);
         startupIntentHandled = true;
         handleIncomingIntent(getIntent());
     }

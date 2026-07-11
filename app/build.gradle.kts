@@ -12,8 +12,8 @@ android {
         applicationId = "com.DONGFANG_WANGDAREN.Reader_RX"
         minSdk = 33
         targetSdk = 36
-        versionCode = 26_0711_22_2
-        versionName = "26_0711_22_2.NANJING"
+        versionCode = 26_0712_02_1
+        versionName = "26_0712_02_1.NANJING"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

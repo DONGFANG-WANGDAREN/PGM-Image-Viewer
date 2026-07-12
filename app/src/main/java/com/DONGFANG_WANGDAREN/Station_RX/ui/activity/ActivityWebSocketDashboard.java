@@ -2,7 +2,9 @@ package com.DONGFANG_WANGDAREN.Station_RX.ui.activity;
 
 
 import com.DONGFANG_WANGDAREN.Station_RX.R;
+import com.DONGFANG_WANGDAREN.Station_RX.app.AppConfig;
 import com.DONGFANG_WANGDAREN.Station_RX.app.AppLogger;
+import com.DONGFANG_WANGDAREN.Station_RX.rust.RustServerBridge;
 import com.DONGFANG_WANGDAREN.Station_RX.websocket.WebSocketService;
 import android.content.ComponentName;
 import android.content.Context;
@@ -32,6 +34,10 @@ import java.util.concurrent.TimeUnit;
 public class ActivityWebSocketDashboard extends AppCompatActivity {
 
     private static final String TAG = "ActivityWebSocketDashboard";
+
+    private static final int ID_CHAT_ROOM = 0;
+    private static final int ID_SCAN_LOGIN = 1;
+    private static final int ID_RUST_SERVER = 2;
 
     private final List<ServiceItem> items = new ArrayList<>();
     private ServiceAdapter adapter;
@@ -109,16 +115,38 @@ public class ActivityWebSocketDashboard extends AppCompatActivity {
 
     private void refreshItems() {
         items.clear();
-        boolean running = webSocketService != null && webSocketService.isRunning();
-        String status;
-        if (running && webSocketService != null) {
-            status = getString(R.string.dashboard_status_running,
+
+        boolean chatRunning = webSocketService != null && webSocketService.isRunning();
+        String chatStatus;
+        if (chatRunning && webSocketService != null) {
+            chatStatus = getString(R.string.dashboard_status_running,
                     webSocketService.getConnectedClientCount(),
                     webSocketService.getTotalMessagesSent());
         } else {
-            status = getString(R.string.dashboard_status_stopped);
+            chatStatus = getString(R.string.dashboard_status_stopped);
         }
-        items.add(new ServiceItem(getString(R.string.dashboard_local_server), status, running));
+        items.add(new ServiceItem(ID_CHAT_ROOM, getString(R.string.dashboard_chat_room), chatStatus, chatRunning));
+
+        boolean scanLoginRunning = chatRunning;
+        String scanLoginStatus = scanLoginRunning ? getString(R.string.dashboard_status_running_simple) : getString(R.string.dashboard_status_stopped);
+        String httpAddress = webSocketService != null ? webSocketService.getHttpAddress() : null;
+        if (scanLoginRunning && httpAddress != null && !httpAddress.isEmpty()) {
+            scanLoginStatus = getString(R.string.dashboard_status_running_with_address, httpAddress + "/web-login");
+        }
+        items.add(new ServiceItem(ID_SCAN_LOGIN, getString(R.string.dashboard_scan_login), scanLoginStatus, scanLoginRunning));
+
+        boolean rustRunning = RustServerBridge.isRunning();
+        String rustStatus = rustRunning ? getString(R.string.dashboard_status_running_simple) : getString(R.string.dashboard_status_stopped);
+        if (rustRunning) {
+            String ip = WebSocketService.getLocalIpAddress();
+            if (ip == null || ip.isEmpty()) {
+                ip = "127.0.0.1";
+            }
+            String rustAddress = "http://" + ip + ":" + (AppConfig.get().getHttpPort() + 1000);
+            rustStatus = getString(R.string.dashboard_status_running_with_address, rustAddress);
+        }
+        items.add(new ServiceItem(ID_RUST_SERVER, getString(R.string.dashboard_rust_server), rustStatus, rustRunning));
+
         adapter.notifyDataSetChanged();
     }
 
@@ -126,17 +154,30 @@ public class ActivityWebSocketDashboard extends AppCompatActivity {
         if (position < 0 || position >= items.size()) {
             return;
         }
-        startActivity(new Intent(this, ActivityWebSocketStats.class));
+        ServiceItem item = items.get(position);
+        switch (item.id) {
+            case ID_CHAT_ROOM:
+                startActivity(new Intent(this, ActivityWebSocketStats.class));
+                break;
+            case ID_SCAN_LOGIN:
+                startActivity(new Intent(this, ActivityTools.class));
+                break;
+            case ID_RUST_SERVER:
+                startActivity(new Intent(this, ActivityRustServer.class));
+                break;
+        }
     }
 
     private static final class ServiceItem {
+        final int id;
         @NonNull
         final String name;
         @NonNull
         final String status;
         final boolean running;
 
-        ServiceItem(@NonNull String name, @NonNull String status, boolean running) {
+        ServiceItem(int id, @NonNull String name, @NonNull String status, boolean running) {
+            this.id = id;
             this.name = name;
             this.status = status;
             this.running = running;

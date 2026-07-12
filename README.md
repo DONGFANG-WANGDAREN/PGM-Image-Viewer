@@ -58,6 +58,7 @@ The tools menu is opened from the main screen and currently contains:
 - **WebSocket Dashboard** — lists the running local WebSocket service and opens a detailed statistics page.
 - **Chat Room** — starts a local WebSocket server and a built-in HTTP monitor page.
 - **Scan Web Login** — scans a QR code displayed on another device to authorize its browser session.
+- **Rust Server** — starts an experimental Rust-based server that runs in parallel with the Java chat room.
 
 In the chat room:
 
@@ -97,6 +98,25 @@ The dashboard shows the running local service and, when opened, displays real-ti
 - **Users** — per-user list showing online/offline status, stay duration, message count, and last active time
 
 > Ports, sender names, and message types can be changed in [`app_config.json`](app/src/main/assets/app_config.json).
+
+### Rust Server (Experimental)
+
+The **Rust Server** is an experimental Axum-based server embedded in the app. It runs on the Java HTTP port plus `1000` (default `9081`) and uses the same web assets as the Java chat room. It is intended to eventually mirror the Java chat room but is still a work in progress.
+
+What currently works:
+
+- WebSocket chat at `/ws?name=...` with text messages and enter/leave system messages.
+- Web chat page (`/`) with text and image sending.
+- File manager page (`/files`) with file listing, download, preview, and chunked upload.
+- Device information page via `/api/device`.
+
+Known issues and limitations (not being changed at the moment):
+
+- **Authentication**: the Rust server does not enforce the token/cookie login used by the Java file manager. The web file manager is publicly accessible while the Rust server is running.
+- **Chat logs**: chat messages are not written to the `WebSocket/Chat/...` log files (the Java server still does this).
+- **WebSocket port**: the Rust WebSocket is served on the Rust HTTP port (`/ws`), not on a separate dedicated WebSocket port.
+- **Image uploads**: the whole image is loaded into memory before being saved.
+- **QR web login**: the Rust server does not support the scan-to-login flow.
 
 ## Chat Logs
 

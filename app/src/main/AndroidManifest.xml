@@ -236,6 +236,11 @@
             android:exported="false"
             android:label="@string/tools_dashboard_stats"
             android:theme="@style/Theme.PGMImageViewer" />
+        <activity
+            android:name=".ui.activity.ActivityRustServer"
+            android:exported="false"
+            android:label="@string/rust_server_title"
+            android:theme="@style/Theme.PGMImageViewer" />
 
         <service
             android:name=".websocket.WebSocketService"

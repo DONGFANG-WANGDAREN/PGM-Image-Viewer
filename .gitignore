@@ -20,3 +20,9 @@ local.properties
 *.apk
 *.aab
 *.ap_
+
+# Rust build artifacts
+rust_server/target/
+
+# Compiled native libraries (rebuilt by cargoBuild Gradle task)
+app/src/main/jniLibs/

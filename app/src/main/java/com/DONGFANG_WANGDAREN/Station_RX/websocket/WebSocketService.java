@@ -5,14 +5,17 @@ import com.DONGFANG_WANGDAREN.Station_RX.R;
 import com.DONGFANG_WANGDAREN.Station_RX.ui.activity.ActivityWebSocket;
 import com.DONGFANG_WANGDAREN.Station_RX.app.AppConfig;
 import com.DONGFANG_WANGDAREN.Station_RX.app.AppLogger;
+import com.DONGFANG_WANGDAREN.Station_RX.rust.RustServerBridge;
 import com.DONGFANG_WANGDAREN.Station_RX.storage.AppStoragePaths;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
@@ -60,10 +63,19 @@ public class WebSocketService extends Service {
 
     private static final String TAG = "WebSocketService";
     private static final String ACTION_STOP = "com.DONGFANG_WANGDAREN.Station_RX.STOP_WEBSOCKET";
+    private static final String ACTION_REFRESH_NOTIFICATION = "com.DONGFANG_WANGDAREN.Station_RX.REFRESH_SERVICES_NOTIFICATION";
     private static final String NOTIFICATION_CHANNEL_ID = "websocket_service_channel";
     private static final int NOTIFICATION_ID = 1;
 
     private final IBinder binder = new LocalBinder();
+    private final BroadcastReceiver refreshNotificationReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (running) {
+                startForeground(NOTIFICATION_ID, buildNotification());
+            }
+        }
+    };
     private final CopyOnWriteArrayList<EventListener> listeners = new CopyOnWriteArrayList<>();
     private final Map<WebSocket, String> clientNames = new ConcurrentHashMap<>();
     private final Random random = new Random();
@@ -134,7 +146,17 @@ public class WebSocketService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        registerRefreshNotificationReceiver();
         AppLogger.i(TAG, "Service created.");
+    }
+
+    private void registerRefreshNotificationReceiver() {
+        IntentFilter filter = new IntentFilter(ACTION_REFRESH_NOTIFICATION);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(refreshNotificationReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(refreshNotificationReceiver, filter);
+        }
     }
 
     @Override
@@ -165,6 +187,11 @@ public class WebSocketService extends Service {
     public void onDestroy() {
         stopServer();
         listeners.clear();
+        try {
+            unregisterReceiver(refreshNotificationReceiver);
+        } catch (IllegalArgumentException exception) {
+            // Receiver was not registered.
+        }
         AppLogger.i(TAG, "Service destroyed.");
         super.onDestroy();
     }
@@ -255,19 +282,46 @@ public class WebSocketService extends Service {
     private Notification buildNotification() {
         createNotificationChannel();
         String httpAddress = getHttpAddress();
-        String defaultContent = getString(R.string.websocket_notification_text);
+        String defaultContent = getString(R.string.services_notification_text);
         if (httpAddress != null && !httpAddress.isEmpty()) {
             defaultContent = getString(R.string.websocket_browser_address) + ": " + httpAddress;
         }
         String content = lastMessagePreview != null ? lastMessagePreview : defaultContent;
-        String bigText = lastMessagePreview != null ? defaultContent + "\n" + lastMessagePreview : defaultContent;
+
+        StringBuilder bigTextBuilder = new StringBuilder();
+        bigTextBuilder.append(getString(R.string.service_chat_room)).append(": ");
+        bigTextBuilder.append(running ? getString(R.string.service_status_running) : getString(R.string.service_status_stopped));
+        if (running) {
+            bigTextBuilder.append(" · ").append(getConnectedClientCount()).append(" clients");
+        }
+        bigTextBuilder.append("\n");
+        bigTextBuilder.append(getString(R.string.service_scan_login)).append(": ");
+        bigTextBuilder.append(running ? getString(R.string.service_status_running) : getString(R.string.service_status_stopped));
+        if (running && httpAddress != null && !httpAddress.isEmpty()) {
+            bigTextBuilder.append(" · ").append(httpAddress).append("/web-login");
+        }
+        bigTextBuilder.append("\n");
+        bigTextBuilder.append(getString(R.string.service_rust_server)).append(": ");
+        boolean rustRunning = RustServerBridge.isRunning();
+        bigTextBuilder.append(rustRunning ? getString(R.string.service_status_running) : getString(R.string.service_status_stopped));
+        if (rustRunning) {
+            String ip = getLocalIpAddress();
+            if (ip == null || ip.isEmpty()) {
+                ip = "127.0.0.1";
+            }
+            bigTextBuilder.append(" · http://").append(ip).append(":").append(AppConfig.get().getHttpPort() + 1000);
+        }
+        if (lastMessagePreview != null) {
+            bigTextBuilder.append("\n\n").append(lastMessagePreview);
+        }
+
         PendingIntent contentIntent = getContentPendingIntent();
         PendingIntent stopIntent = getStopPendingIntent();
         return new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_menu_share)
-                .setContentTitle(getString(R.string.websocket_notification_title))
+                .setContentTitle(getString(R.string.services_notification_title))
                 .setContentText(content)
-                .setStyle(new NotificationCompat.BigTextStyle().bigText(bigText))
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(bigTextBuilder.toString()))
                 .setContentIntent(contentIntent)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
@@ -660,6 +714,12 @@ public class WebSocketService extends Service {
     private void setConnectedClientCount(int count) {
         connectedClientCount = count;
         notifyClientCountChanged();
+        if (running) {
+            NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (manager != null) {
+                manager.notify(NOTIFICATION_ID, buildNotification());
+            }
+        }
     }
 
     private void log(@NonNull String message) {

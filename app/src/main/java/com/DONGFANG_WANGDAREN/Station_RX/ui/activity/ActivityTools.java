@@ -76,6 +76,7 @@ public class ActivityTools extends AppCompatActivity {
         items.add(new ToolItem(getString(R.string.tools_dashboard), this::openDashboard));
         items.add(new ToolItem(getString(R.string.tools_chat_room), this::openChatRoom));
         items.add(new ToolItem(getString(R.string.tools_scan_login), this::openScanLogin));
+        items.add(new ToolItem(getString(R.string.tools_rust_server), this::openRustServer));
 
         recyclerView.setAdapter(new ToolsAdapter(items));
 
@@ -90,6 +91,11 @@ public class ActivityTools extends AppCompatActivity {
     private void openChatRoom() {
         AppLogger.i(TAG, "Open chat room.");
         startActivity(new Intent(this, ActivityWebSocket.class));
+    }
+
+    private void openRustServer() {
+        AppLogger.i(TAG, "Open Rust server.");
+        startActivity(new Intent(this, ActivityRustServer.class));
     }
 
     private void openScanLogin() {

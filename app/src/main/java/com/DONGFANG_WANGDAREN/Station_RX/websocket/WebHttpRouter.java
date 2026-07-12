@@ -23,12 +23,17 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Iterator;
@@ -51,9 +56,12 @@ public final class WebHttpRouter {
     private static final String COOKIE_NAME = "rrx_token";
     private static final String WEB_AUTH_COOKIE_NAME = "rrx_web_auth";
     private static final long WEB_LOGIN_SESSION_MAX_AGE_MS = 10 * 60 * 1000;
+    private static final long UPLOAD_SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final ConcurrentHashMap<String, WebLoginSession> WEB_LOGIN_SESSIONS = new ConcurrentHashMap<>();
+
+    private final ConcurrentHashMap<String, UploadSession> uploadSessions = new ConcurrentHashMap<>();
 
     private final WebSocketService service;
     private final Context context;
@@ -116,13 +124,21 @@ public final class WebHttpRouter {
             case "/api/files":
                 return handleFileList(params);
             case "/api/download":
-                return handleDownload(params);
+                return handleDownload(session, params);
             case "/api/view":
                 return handleView(params);
             case "/api/device":
                 return handleDeviceInfo();
             case "/api/upload":
                 return handleUpload(session);
+            case "/api/upload-init":
+                return handleUploadInit(params);
+            case "/api/upload-chunk":
+                return handleUploadChunk(session);
+            case "/api/upload-finish":
+                return handleUploadFinish(session);
+            case "/api/chat/upload-image":
+                return handleChatImageUpload(session);
             default:
                 return newFixedLengthResponse(NanoHTTPD.Response.Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "Not found");
         }
@@ -322,6 +338,18 @@ public final class WebHttpRouter {
         return builder.toString();
     }
 
+    private void cleanupExpiredUploadSessions() {
+        long now = System.currentTimeMillis();
+        Iterator<Map.Entry<String, UploadSession>> iterator = uploadSessions.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, UploadSession> entry = iterator.next();
+            if (now - entry.getValue().lastActiveAt > UPLOAD_SESSION_MAX_AGE_MS) {
+                entry.getValue().tempFile.delete();
+                iterator.remove();
+            }
+        }
+    }
+
     private static final class WebLoginSession {
         @NonNull
         final String sessionId;
@@ -338,6 +366,66 @@ public final class WebHttpRouter {
             this.authToken = authToken;
             this.createdAt = System.currentTimeMillis();
             this.authenticated = false;
+        }
+    }
+
+    private static final class UploadSession {
+        @NonNull
+        final String uploadId;
+        @NonNull
+        final File targetDirectory;
+        @NonNull
+        final String fileName;
+        @NonNull
+        final File tempFile;
+        volatile long lastActiveAt;
+        int receivedChunks;
+
+        UploadSession(@NonNull String uploadId, @NonNull File targetDirectory, @NonNull String fileName, @NonNull File tempFile, long lastActiveAt) {
+            this.uploadId = uploadId;
+            this.targetDirectory = targetDirectory;
+            this.fileName = fileName;
+            this.tempFile = tempFile;
+            this.lastActiveAt = lastActiveAt;
+            this.receivedChunks = 0;
+        }
+    }
+
+    private static final class RandomAccessFileInputStream extends InputStream {
+        @NonNull
+        private final RandomAccessFile randomAccessFile;
+        private long remaining;
+
+        RandomAccessFileInputStream(@NonNull RandomAccessFile randomAccessFile, long length) {
+            this.randomAccessFile = randomAccessFile;
+            this.remaining = length;
+        }
+
+        @Override
+        public int read() throws IOException {
+            if (remaining <= 0) {
+                return -1;
+            }
+            remaining--;
+            return randomAccessFile.read();
+        }
+
+        @Override
+        public int read(@NonNull byte[] buffer, int offset, int length) throws IOException {
+            if (remaining <= 0) {
+                return -1;
+            }
+            int toRead = (int) Math.min(length, remaining);
+            int read = randomAccessFile.read(buffer, offset, toRead);
+            if (read > 0) {
+                remaining -= read;
+            }
+            return read;
+        }
+
+        @Override
+        public void close() throws IOException {
+            randomAccessFile.close();
         }
     }
 
@@ -405,12 +493,26 @@ public final class WebHttpRouter {
     }
 
     @NonNull
-    private NanoHTTPD.Response handleDownload(@NonNull Map<String, String> params) {
+    private NanoHTTPD.Response handleDownload(@NonNull NanoHTTPD.IHTTPSession session, @NonNull Map<String, String> params) {
         File file = resolveFileParam(params.get("path"));
         if (file == null) {
             return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, NanoHTTPD.MIME_PLAINTEXT, "Invalid path.");
         }
-        return serveFile(file, getMimeType(file.getName()), true);
+        String mimeType = getMimeType(file.getName());
+        if (session.getMethod() == NanoHTTPD.Method.HEAD) {
+            NanoHTTPD.Response response = NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, mimeType, new ByteArrayInputStream(new byte[0]), 0);
+            response.addHeader("Content-Length", String.valueOf(file.length()));
+            response.addHeader("Accept-Ranges", "bytes");
+            if (mimeType.startsWith("application/") || mimeType.startsWith("video/") || mimeType.startsWith("audio/")) {
+                response.addHeader("Content-Disposition", "attachment; filename=\"" + file.getName().replace("\"", "'") + "\"");
+            }
+            return response;
+        }
+        String rangeHeader = session.getHeaders().get("range");
+        if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
+            return serveFileRange(file, mimeType, rangeHeader, true);
+        }
+        return serveFile(file, mimeType, true);
     }
 
     @NonNull
@@ -468,6 +570,239 @@ public final class WebHttpRouter {
     }
 
     @NonNull
+    private NanoHTTPD.Response handleUploadInit(@NonNull Map<String, String> params) {
+        cleanupExpiredUploadSessions();
+        String uploadId = params.get("id");
+        String path = params.get("path");
+        String fileName = params.get("name");
+        if (uploadId == null || uploadId.isEmpty() || fileName == null || fileName.isEmpty()) {
+            return jsonErrorResponse("Missing upload id or file name.");
+        }
+        if (path == null || path.isEmpty()) {
+            path = Environment.getExternalStorageDirectory().getAbsolutePath();
+        }
+        File directory = new File(path);
+        if (!directory.exists() || !directory.isDirectory() || !isUnderAllowedRoot(directory)) {
+            return jsonErrorResponse("Invalid directory.");
+        }
+        File cacheDir = new File(context.getCacheDir(), "web_uploads");
+        if (!cacheDir.exists()) {
+            cacheDir.mkdirs();
+        }
+        File tempFile = new File(cacheDir, uploadId + ".tmp");
+        try {
+            if (tempFile.exists()) {
+                tempFile.delete();
+            }
+            tempFile.createNewFile();
+        } catch (IOException exception) {
+            AppLogger.e(TAG, "Failed to create upload temp file.", exception);
+            return jsonErrorResponse("Failed to initialize upload.");
+        }
+        uploadSessions.put(uploadId, new UploadSession(uploadId, directory, fileName, tempFile, System.currentTimeMillis()));
+        JSONObject result = new JSONObject();
+        try {
+            result.put("success", true);
+            result.put("id", uploadId);
+        } catch (JSONException exception) {
+            AppLogger.e(TAG, "Failed to build upload init response JSON.", exception);
+        }
+        return jsonResponse(result, NanoHTTPD.Response.Status.OK);
+    }
+
+    @NonNull
+    private NanoHTTPD.Response handleUploadChunk(@NonNull NanoHTTPD.IHTTPSession session) {
+        cleanupExpiredUploadSessions();
+        if (session.getMethod() != NanoHTTPD.Method.POST) {
+            return jsonErrorResponse("Use POST.");
+        }
+        Map<String, String> files = new HashMap<>();
+        try {
+            session.parseBody(files);
+        } catch (Exception exception) {
+            AppLogger.e(TAG, "Failed to parse upload chunk body.", exception);
+            return jsonErrorResponse("Failed to parse chunk.");
+        }
+        Map<String, String> params = session.getParms();
+        String uploadId = params.get("id");
+        String indexText = params.get("index");
+        String tmpPath = files.get("chunk");
+        if (uploadId == null || indexText == null || tmpPath == null) {
+            return jsonErrorResponse("Missing chunk parameters.");
+        }
+        UploadSession uploadSession = uploadSessions.get(uploadId);
+        if (uploadSession == null) {
+            return jsonErrorResponse("Upload session not found.");
+        }
+        int index;
+        try {
+            index = Integer.parseInt(indexText);
+        } catch (NumberFormatException exception) {
+            return jsonErrorResponse("Invalid chunk index.");
+        }
+        if (index != uploadSession.receivedChunks) {
+            return jsonErrorResponse("Unexpected chunk index. Expected " + uploadSession.receivedChunks + " but got " + index + ".");
+        }
+        File chunkFile = new File(tmpPath);
+        try (InputStream inputStream = new FileInputStream(chunkFile);
+             OutputStream outputStream = new FileOutputStream(uploadSession.tempFile, true)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, read);
+            }
+            outputStream.flush();
+            uploadSession.receivedChunks++;
+            uploadSession.lastActiveAt = System.currentTimeMillis();
+        } catch (IOException exception) {
+            AppLogger.e(TAG, "Failed to append upload chunk.", exception);
+            return jsonErrorResponse("Failed to write chunk.");
+        }
+        JSONObject result = new JSONObject();
+        try {
+            result.put("success", true);
+            result.put("received", uploadSession.receivedChunks);
+        } catch (JSONException exception) {
+            AppLogger.e(TAG, "Failed to build upload chunk response JSON.", exception);
+        }
+        return jsonResponse(result, NanoHTTPD.Response.Status.OK);
+    }
+
+    @NonNull
+    private NanoHTTPD.Response handleUploadFinish(@NonNull NanoHTTPD.IHTTPSession session) {
+        cleanupExpiredUploadSessions();
+        if (session.getMethod() != NanoHTTPD.Method.POST) {
+            return jsonErrorResponse("Use POST.");
+        }
+        try {
+            session.parseBody(new HashMap<>());
+        } catch (Exception ignored) {
+        }
+        Map<String, String> params = session.getParms();
+        String uploadId = params.get("id");
+        if (uploadId == null || uploadId.isEmpty()) {
+            return jsonErrorResponse("Missing upload id.");
+        }
+        UploadSession uploadSession = uploadSessions.remove(uploadId);
+        if (uploadSession == null) {
+            return jsonErrorResponse("Upload session not found.");
+        }
+        File destination = resolveUniqueFile(uploadSession.targetDirectory, uploadSession.fileName);
+        if (!uploadSession.tempFile.renameTo(destination)) {
+            try {
+                java.nio.file.Files.copy(uploadSession.tempFile.toPath(), destination.toPath());
+                uploadSession.tempFile.delete();
+            } catch (IOException exception) {
+                AppLogger.e(TAG, "Failed to finalize uploaded file.", exception);
+                uploadSession.tempFile.delete();
+                return jsonErrorResponse("Failed to save file.");
+            }
+        }
+        JSONObject result = new JSONObject();
+        try {
+            result.put("success", true);
+            result.put("path", destination.getAbsolutePath());
+            result.put("name", destination.getName());
+        } catch (JSONException exception) {
+            AppLogger.e(TAG, "Failed to build upload finish response JSON.", exception);
+        }
+        return jsonResponse(result, NanoHTTPD.Response.Status.OK);
+    }
+
+    @NonNull
+    private NanoHTTPD.Response handleChatImageUpload(@NonNull NanoHTTPD.IHTTPSession session) {
+        if (session.getMethod() != NanoHTTPD.Method.POST) {
+            return jsonErrorResponse("Use POST.");
+        }
+        Map<String, String> files = new HashMap<>();
+        try {
+            session.parseBody(files);
+        } catch (Exception exception) {
+            AppLogger.e(TAG, "Failed to parse chat image upload body.", exception);
+            return jsonErrorResponse("Failed to parse image.");
+        }
+        String tmpPath = files.get("image");
+        if (tmpPath == null || tmpPath.isEmpty()) {
+            return jsonErrorResponse("Missing image.");
+        }
+        File uploadedFile = new File(tmpPath);
+        if (!uploadedFile.exists()) {
+            return jsonErrorResponse("Uploaded image not found.");
+        }
+
+        String originalName = session.getParms().getOrDefault("image", "upload");
+        String extension = getImageExtension(originalName);
+        if (extension.isEmpty()) {
+            extension = ".jpg";
+        }
+        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(new Date());
+        String randomSuffix = String.format(Locale.US, "%04d", SECURE_RANDOM.nextInt(10000));
+        String fileName = "IMG_" + timeStamp + "_" + randomSuffix + extension;
+
+        File imageDirectory = AppStoragePaths.resolveWebSocketChatImagesDirectory(context);
+        File destinationFile = new File(imageDirectory, fileName);
+        int conflictIndex = 1;
+        while (destinationFile.exists()) {
+            String conflictName = "IMG_" + timeStamp + "_" + randomSuffix + "_" + conflictIndex + extension;
+            destinationFile = new File(imageDirectory, conflictName);
+            conflictIndex++;
+        }
+
+        try {
+            java.nio.file.Files.copy(uploadedFile.toPath(), destinationFile.toPath());
+        } catch (IOException exception) {
+            AppLogger.e(TAG, "Failed to save chat image.", exception);
+            return jsonErrorResponse("Failed to save image.");
+        }
+
+        String imageUrl = AppConfig.get().getImageUrlPrefix() + fileName;
+        service.sendImageMessage(imageUrl);
+
+        JSONObject result = new JSONObject();
+        try {
+            result.put("success", true);
+            result.put("url", imageUrl);
+            result.put("name", fileName);
+        } catch (JSONException exception) {
+            AppLogger.e(TAG, "Failed to build chat image upload response JSON.", exception);
+        }
+        return jsonResponse(result, NanoHTTPD.Response.Status.OK);
+    }
+
+    @NonNull
+    private String getImageExtension(@NonNull String fileName) {
+        String lower = fileName.toLowerCase(Locale.US);
+        if (lower.endsWith(".png")) {
+            return ".png";
+        }
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+            return ".jpg";
+        }
+        if (lower.endsWith(".gif")) {
+            return ".gif";
+        }
+        if (lower.endsWith(".webp")) {
+            return ".webp";
+        }
+        if (lower.endsWith(".bmp")) {
+            return ".bmp";
+        }
+        return "";
+    }
+
+    @NonNull
+    private NanoHTTPD.Response jsonErrorResponse(@NonNull String message) {
+        JSONObject result = new JSONObject();
+        try {
+            result.put("success", false);
+            result.put("error", message);
+        } catch (JSONException exception) {
+            AppLogger.e(TAG, "Failed to build error JSON.", exception);
+        }
+        return jsonResponse(result, NanoHTTPD.Response.Status.OK);
+    }
+
+    @NonNull
     private File resolveUniqueFile(@NonNull File directory, @NonNull String fileName) {
         File file = new File(directory, fileName);
         if (!file.exists()) {
@@ -515,6 +850,7 @@ public final class WebHttpRouter {
         try {
             FileInputStream inputStream = new FileInputStream(file);
             NanoHTTPD.Response response = newFixedLengthResponse(NanoHTTPD.Response.Status.OK, mimeType, inputStream, file.length());
+            response.addHeader("Accept-Ranges", "bytes");
             if (forceDownload) {
                 response.addHeader("Content-Disposition", "attachment; filename=\"" + file.getName().replace("\"", "'") + "\"");
             }
@@ -522,6 +858,60 @@ public final class WebHttpRouter {
         } catch (FileNotFoundException exception) {
             AppLogger.e(TAG, "File not found: " + file.getAbsolutePath(), exception);
             return newFixedLengthResponse(NanoHTTPD.Response.Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "File not found.");
+        }
+    }
+
+    @NonNull
+    private NanoHTTPD.Response serveFileRange(@NonNull File file, @NonNull String mimeType, @NonNull String rangeHeader, boolean forceDownload) {
+        if (!file.exists() || !file.isFile()) {
+            return newFixedLengthResponse(NanoHTTPD.Response.Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "File not found.");
+        }
+        long fileLength = file.length();
+        String rangeValue = rangeHeader.substring(6).trim();
+        int dashIndex = rangeValue.indexOf('-');
+        if (dashIndex < 0) {
+            return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, NanoHTTPD.MIME_PLAINTEXT, "Invalid range.");
+        }
+        long start;
+        long end;
+        try {
+            String startText = rangeValue.substring(0, dashIndex).trim();
+            String endText = rangeValue.substring(dashIndex + 1).trim();
+            start = startText.isEmpty() ? 0 : Long.parseLong(startText);
+            if (start < 0 || start >= fileLength) {
+                NanoHTTPD.Response response = newFixedLengthResponse(NanoHTTPD.Response.Status.RANGE_NOT_SATISFIABLE, NanoHTTPD.MIME_PLAINTEXT, "Range not satisfiable.");
+                response.addHeader("Content-Range", "bytes */" + fileLength);
+                return response;
+            }
+            end = endText.isEmpty() ? fileLength - 1 : Long.parseLong(endText);
+            if (end >= fileLength) {
+                end = fileLength - 1;
+            }
+            if (end < start) {
+                end = start;
+            }
+        } catch (NumberFormatException exception) {
+            return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, NanoHTTPD.MIME_PLAINTEXT, "Invalid range.");
+        }
+        long contentLength = end - start + 1;
+        try {
+            RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
+            randomAccessFile.seek(start);
+            NanoHTTPD.Response response = NanoHTTPD.newFixedLengthResponse(
+                    NanoHTTPD.Response.Status.PARTIAL_CONTENT,
+                    mimeType,
+                    new RandomAccessFileInputStream(randomAccessFile, contentLength),
+                    contentLength
+            );
+            response.addHeader("Content-Range", "bytes " + start + "-" + end + "/" + fileLength);
+            response.addHeader("Accept-Ranges", "bytes");
+            if (forceDownload) {
+                response.addHeader("Content-Disposition", "attachment; filename=\"" + file.getName().replace("\"", "'") + "\"");
+            }
+            return response;
+        } catch (Exception exception) {
+            AppLogger.e(TAG, "Failed to serve file range: " + file.getAbsolutePath(), exception);
+            return newFixedLengthResponse(NanoHTTPD.Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, "Failed to serve range.");
         }
     }
 
@@ -600,6 +990,7 @@ public final class WebHttpRouter {
             network.put("wifiLinkSpeedMbps", NetworkInfoHelper.getWifiLinkSpeedMbps(context));
             network.put("wifiSignalDbm", NetworkInfoHelper.getWifiSignalDbm(context));
             network.put("wifiSignalLevel", NetworkInfoHelper.getWifiSignalLevel(context));
+            network.put("estimatedDistanceMeters", NetworkInfoHelper.estimateWifiDistanceMeters(context));
             info.put("network", network);
         } catch (JSONException exception) {
             AppLogger.e(TAG, "Failed to build device info JSON.", exception);

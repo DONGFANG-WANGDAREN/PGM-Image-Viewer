@@ -17,8 +17,7 @@
     <string name="history_title">Recent Files</string>
     <string name="history_subtitle">Tap a file to open it again.</string>
     <string name="history_empty">No recent files yet.</string>
-    <string name="show_history">Show History</string>
-    <string name="hide_history">Hide History</string>
+    <string name="show_history">History</string>
     <string name="dialog_missing_file_title">File Not Found</string>
     <string name="dialog_missing_file_message">The file &quot;%1$s&quot; no longer exists. Remove it from recent files?</string>
     <string name="dialog_delete_record">Remove</string>
@@ -43,7 +42,6 @@
     <string name="toast_storage_permission_denied">All Files Access is required. The app will close.</string>
     <string name="toast_convert_pmg_success">PMG saved: %1$s</string>
     <string name="toast_convert_pmg_failed">Failed to save the PMG file.</string>
-    <string name="toast_convert_pmg_select_folder">Select the original folder so the PMG file can be saved there.</string>
     <string name="text_scroll_position_initial">0%%</string>
     <string name="text_scroll_position">%1$d%%</string>
     <string name="text_preview_truncated_notice">[Preview truncated to keep the viewer responsive.]</string>
@@ -53,7 +51,7 @@
     <string name="text_pretty_raw">Original</string>
     <string name="text_zoom_in">Larger Text</string>
     <string name="text_zoom_out">Smaller Text</string>
-    <string name="open_websocket">WebSocket</string>
+    <string name="open_websocket">RX</string>
     <string name="websocket_title">WebSocket Server</string>
     <string name="websocket_server_address">WebSocket address for other apps</string>
     <string name="websocket_browser_address">Open in browser</string>

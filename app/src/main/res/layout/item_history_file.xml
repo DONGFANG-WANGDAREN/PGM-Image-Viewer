@@ -20,10 +20,20 @@
         android:textStyle="bold" />
 
     <TextView
+        android:id="@+id/text_view_history_file_size"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/slate_300"
+        android:textSize="12sp" />
+
+    <TextView
         android:id="@+id/text_view_history_file_path"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="2dp"
         android:ellipsize="middle"
         android:maxLines="2"
         android:textColor="@color/slate_200"

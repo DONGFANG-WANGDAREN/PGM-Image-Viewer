@@ -18,6 +18,17 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/button_open_history"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:minWidth="0dp"
+                android:text="@string/show_history"
+                android:textColor="@color/slate_900"
+                android:textSize="14sp" />
+
             <TextView
                 android:id="@+id/text_view_current_file_title"
                 android:layout_width="0dp"
@@ -286,18 +297,6 @@
                 app:cornerRadius="12dp" />
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/button_toggle_history"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_marginEnd="8dp"
-                android:layout_weight="1"
-                android:text="@string/show_history"
-                android:textSize="14sp"
-                app:cornerRadius="12dp" />
-
-            <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_open_websocket"
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="0dp"
@@ -309,6 +308,15 @@
                 app:cornerRadius="12dp" />
         </LinearLayout>
     </LinearLayout>
+
+    <View
+        android:id="@+id/view_history_scrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#CC000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone" />
 
     <LinearLayout
         android:id="@+id/layout_history_panel"

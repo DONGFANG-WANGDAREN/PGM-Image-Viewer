@@ -17,8 +17,7 @@
     <string name="history_title">最近文件</string>
     <string name="history_subtitle">点击即可再次打开。</string>
     <string name="history_empty">还没有最近文件。</string>
-    <string name="show_history">显示历史</string>
-    <string name="hide_history">隐藏历史</string>
+    <string name="show_history">历史</string>
     <string name="dialog_missing_file_title">文件不存在</string>
     <string name="dialog_missing_file_message">文件“%1$s”已经不存在，是否从历史记录中删除？</string>
     <string name="dialog_delete_record">删除记录</string>
@@ -43,7 +42,6 @@
     <string name="toast_storage_permission_denied">必须授予“所有文件访问权限”，软件将关闭。</string>
     <string name="toast_convert_pmg_success">PMG 已保存：%1$s</string>
     <string name="toast_convert_pmg_failed">保存 PMG 文件失败。</string>
-    <string name="toast_convert_pmg_select_folder">请选择原文件所在文件夹，以便把 PMG 保存回该目录。</string>
     <string name="text_scroll_position_initial">0%%</string>
     <string name="text_scroll_position">%1$d%%</string>
     <string name="text_preview_truncated_notice">[预览内容过大，已截断显示以保持流畅。]</string>
@@ -53,7 +51,7 @@
     <string name="text_pretty_raw">原始内容</string>
     <string name="text_zoom_in">字体放大</string>
     <string name="text_zoom_out">字体缩小</string>
-    <string name="open_websocket">WebSocket</string>
+    <string name="open_websocket">RX</string>
     <string name="websocket_title">WebSocket 服务</string>
     <string name="websocket_server_address">其他应用可连接的 WebSocket 地址</string>
     <string name="websocket_browser_address">在浏览器中打开</string>

@@ -45,6 +45,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
@@ -80,10 +81,8 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
-import java.text.SimpleDateFormat;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
@@ -113,10 +112,10 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private static final String JSON_KEY_URI = "uri";
     private static final String JSON_KEY_FILE_NAME = "file_name";
     private static final String JSON_KEY_FILE_PATH = "file_path";
+    private static final String JSON_KEY_FILE_SIZE = "file_size";
     private static final int TEXT_QUICK_SCROLL_MAX = 1000;
 
     private ActivityResultLauncher<String[]> launcherOpenDocument;
-    private ActivityResultLauncher<Uri> launcherOpenDocumentTree;
     private ActivityResultLauncher<Intent> launcherManageAllFilesAccess;
     private MaterialButton buttonOpenPgm;
     private MaterialButton buttonOpenWebSocket;
@@ -147,8 +146,11 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private View layoutHistoryPanel;
     private LinearLayout layoutHistoryList;
     private TextView textViewHistoryEmpty;
-    private MaterialButton buttonToggleHistory;
+    private View viewHistoryScrim;
+    private MaterialButton buttonOpenHistory;
     private LayoutInflater layoutInflater;
+    @Nullable
+    private OnBackPressedCallback historyBackCallback;
     @Nullable
     private ExoPlayer playerMedia;
     private final ArrayList<HistoryRecord> historyRecords = new ArrayList<>();
@@ -162,10 +164,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private String currentFileName = "";
     @Nullable
     private Uri currentOpenedFileUri;
-    @Nullable
-    private Uri pendingPmgSourceUri;
-    @Nullable
-    private String pendingPmgOutputFileName;
     private String currentOpenMode = OPEN_MODE_UNSUPPORTED;
     private boolean currentFileIsMarkdown;
     private boolean currentTextLargeMode;
@@ -183,6 +181,14 @@ public class ActivityPictureViewer extends AppCompatActivity {
         setContentView(R.layout.activity_picture_viewer);
         AppLogger.i(TAG, "onCreate. intentAction=" + String.valueOf(getIntent().getAction()));
 
+        historyBackCallback = new OnBackPressedCallback(false) {
+            @Override
+            public void handleOnBackPressed() {
+                setHistoryPanelVisible(false);
+            }
+        };
+        getOnBackPressedDispatcher().addCallback(this, historyBackCallback);
+
         launcherOpenDocument = registerForActivityResult(
                 new ActivityResultContracts.OpenDocument(),
                 uri -> {
@@ -194,21 +200,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
                             Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                     );
                     handleSelectedFile(uri, null, null, true, false);
-                }
-        );
-        launcherOpenDocumentTree = registerForActivityResult(
-                new ActivityResultContracts.OpenDocumentTree(),
-                uri -> {
-                    if (uri == null) {
-                        clearPendingPmgFolderRequest();
-                        showToast(R.string.toast_convert_pmg_failed);
-                        return;
-                    }
-                    tryTakePersistableReadPermission(
-                            uri,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                    );
-                    continuePendingPmgSaveWithTreeUri(uri);
                 }
         );
         launcherManageAllFilesAccess = registerForActivityResult(
@@ -252,7 +243,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
         layoutHistoryPanel = findViewById(R.id.layout_history_panel);
         layoutHistoryList = findViewById(R.id.layout_history_list);
         textViewHistoryEmpty = findViewById(R.id.text_view_history_empty);
-        buttonToggleHistory = findViewById(R.id.button_toggle_history);
+        viewHistoryScrim = findViewById(R.id.view_history_scrim);
+        buttonOpenHistory = findViewById(R.id.button_open_history);
         layoutInflater = LayoutInflater.from(this);
 
         WebSettings webSettings = webViewMarkdownPreview.getSettings();
@@ -273,7 +265,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
             startActivity(new Intent(this, ActivityTools.class));
         });
         buttonConvertPmg.setOnClickListener(view -> convertCurrentPgmToPmgFile());
-        buttonToggleHistory.setOnClickListener(view -> setHistoryPanelVisible(layoutHistoryPanel.getVisibility() != View.VISIBLE));
+        buttonOpenHistory.setOnClickListener(view -> setHistoryPanelVisible(true));
+        viewHistoryScrim.setOnClickListener(view -> setHistoryPanelVisible(false));
         buttonSearchPrevious.setOnClickListener(view -> moveToSearchMatch(-1));
         buttonSearchNext.setOnClickListener(view -> moveToSearchMatch(1));
         buttonToggleMarkdownPreview.setOnClickListener(view -> {
@@ -431,13 +424,15 @@ public class ActivityPictureViewer extends AppCompatActivity {
             return;
         }
 
+        long fileSize = getFileSize(uri);
+
         try {
             verifyFileExists(uri);
             if (OPEN_MODE_INSTALLER_APK.equals(openMode)) {
                 updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
-                updateCurrentFileInfo(fileName, filePath);
+                updateCurrentFileInfo(fileName, filePath, fileSize);
                 if (saveToHistory) {
-                    recordHistory(uri.toString(), fileName, filePath);
+                    recordHistory(uri.toString(), fileName, filePath, fileSize);
                 }
                 showApkInstallDialog(uri);
                 return;
@@ -449,10 +444,10 @@ public class ActivityPictureViewer extends AppCompatActivity {
             }
             if (shouldOfferDocumentChoice(openMode)) {
                 if (hasExternalViewer(uri, mimeType)) {
-                    showDocumentOpenChoiceDialog(uri, mimeType, fileName, filePath, openMode, saveToHistory, promptDeleteOnMissing);
+                    showDocumentOpenChoiceDialog(uri, mimeType, fileName, filePath, openMode, saveToHistory, promptDeleteOnMissing, fileSize);
                     return;
                 }
-                performInAppOpen(uri, fileName, filePath, openMode, saveToHistory, promptDeleteOnMissing);
+                performInAppOpen(uri, fileName, filePath, openMode, saveToHistory, promptDeleteOnMissing, fileSize);
                 return;
             }
             if (OPEN_MODE_EXTERNAL.equals(openMode)) {
@@ -461,9 +456,9 @@ public class ActivityPictureViewer extends AppCompatActivity {
                     return;
                 }
                 updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
-                updateCurrentFileInfo(fileName, filePath);
+                updateCurrentFileInfo(fileName, filePath, fileSize);
                 if (saveToHistory) {
-                    recordHistory(uri.toString(), fileName, filePath);
+                    recordHistory(uri.toString(), fileName, filePath, fileSize);
                 }
                 return;
             }
@@ -481,7 +476,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
             return;
         }
 
-        openFileInBackground(uri, fileName, filePath, openMode, saveToHistory, promptDeleteOnMissing);
+        openFileInBackground(uri, fileName, filePath, openMode, saveToHistory, promptDeleteOnMissing, fileSize);
     }
 
     private void performInAppOpen(
@@ -490,7 +485,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
             @NonNull String filePath,
             @NonNull String openMode,
             boolean saveToHistory,
-            boolean promptDeleteOnMissing
+            boolean promptDeleteOnMissing,
+            long fileSize
     ) {
         if (OPEN_MODE_PDF.equals(openMode)) {
             try {
@@ -507,9 +503,9 @@ public class ActivityPictureViewer extends AppCompatActivity {
                         )
                 );
                 updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
-                updateCurrentFileInfo(fileName, filePath);
+                updateCurrentFileInfo(fileName, filePath, fileSize);
                 if (saveToHistory) {
-                    recordHistory(uri.toString(), fileName, filePath);
+                    recordHistory(uri.toString(), fileName, filePath, fileSize);
                 }
             } catch (ActivityNotFoundException exception) {
                 AppLogger.e(TAG, "Failed to launch PDF viewer activity.", exception);
@@ -517,7 +513,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
             }
             return;
         }
-        openFileInBackground(uri, fileName, filePath, openMode, saveToHistory, promptDeleteOnMissing);
+        openFileInBackground(uri, fileName, filePath, openMode, saveToHistory, promptDeleteOnMissing, fileSize);
     }
 
     private void showDocumentOpenChoiceDialog(
@@ -527,22 +523,23 @@ public class ActivityPictureViewer extends AppCompatActivity {
             @NonNull String filePath,
             @NonNull String openMode,
             boolean saveToHistory,
-            boolean promptDeleteOnMissing
+            boolean promptDeleteOnMissing,
+            long fileSize
     ) {
         new AlertDialog.Builder(this)
                 .setTitle(R.string.dialog_document_open_title)
                 .setMessage(R.string.dialog_document_open_message)
                 .setPositiveButton(R.string.dialog_open_in_app, (dialog, which) ->
-                        performInAppOpen(uri, fileName, filePath, openMode, saveToHistory, promptDeleteOnMissing))
+                        performInAppOpen(uri, fileName, filePath, openMode, saveToHistory, promptDeleteOnMissing, fileSize))
                 .setNegativeButton(R.string.dialog_open_in_system, (dialog, which) -> {
                     if (!openWithExternalApp(uri, mimeType)) {
                         showToast(R.string.toast_no_external_viewer);
                         return;
                     }
                     updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
-                    updateCurrentFileInfo(fileName, filePath);
+                    updateCurrentFileInfo(fileName, filePath, fileSize);
                     if (saveToHistory) {
-                        recordHistory(uri.toString(), fileName, filePath);
+                        recordHistory(uri.toString(), fileName, filePath, fileSize);
                     }
                 })
                 .show();
@@ -567,16 +564,13 @@ public class ActivityPictureViewer extends AppCompatActivity {
         updateConvertPmgButton();
         executorOpenFile.execute(() -> {
             try {
-                savePmgIntoSourceFolder(sourceUri, outputFileName);
+                File outputFile = savePmgIntoAppFolder(sourceUri, outputFileName);
                 runOnUiThread(() -> {
                     convertingPmg = false;
                     updateConvertPmgButton();
-                    showToast(getString(R.string.toast_convert_pmg_success, outputFileName));
+                    showToast(getString(R.string.toast_convert_pmg_success, outputFile.getName()));
                 });
-            } catch (SecurityException exception) {
-                AppLogger.e(TAG, "Folder write permission unavailable for PMG export. uri=" + sourceUri, exception);
-                runOnUiThread(() -> requestPmgFolderAccess(sourceUri, outputFileName));
-            } catch (IOException | IllegalArgumentException exception) {
+            } catch (IOException | IllegalArgumentException | SecurityException exception) {
                 AppLogger.e(TAG, "Failed to convert PGM to PMG. uri=" + sourceUri, exception);
                 runOnUiThread(() -> {
                     convertingPmg = false;
@@ -587,157 +581,37 @@ public class ActivityPictureViewer extends AppCompatActivity {
         });
     }
 
-    private void savePmgIntoSourceFolder(@NonNull Uri sourceUri, @NonNull String outputFileName) throws IOException {
-        File sourceFile = tryResolveWritableSourceFile(sourceUri);
-        if (sourceFile != null) {
-            File parentDirectory = sourceFile.getParentFile();
-            if (parentDirectory == null) {
-                throw new IOException("Source parent directory not found.");
-            }
-            File outputFile = new File(parentDirectory, outputFileName);
-            try (InputStream inputStream = getContentResolver().openInputStream(sourceUri);
-                 OutputStream outputStream = new BufferedOutputStream(new FileOutputStream(outputFile))) {
-                if (inputStream == null) {
-                    throw new FileNotFoundException("Input stream is null.");
-                }
-                writePmgFile(inputStream, outputStream);
-            }
-            return;
-        }
-
-        if (!DocumentsContract.isDocumentUri(this, sourceUri)) {
-            throw new IOException("Unsupported source folder.");
-        }
-
-        String authority = sourceUri.getAuthority();
-        if (isNullOrEmpty(authority)) {
-            throw new IOException("Missing document authority.");
-        }
-        String documentId = DocumentsContract.getDocumentId(sourceUri);
-        String parentDocumentId = resolveParentDocumentId(documentId);
-        Uri parentDocumentUri = DocumentsContract.buildDocumentUri(authority, parentDocumentId);
-        Uri outputUri = DocumentsContract.createDocument(
-                getContentResolver(),
-                parentDocumentUri,
-                "image/x-portable-graymap",
-                outputFileName
-        );
-        if (outputUri == null) {
-            throw new IOException("Failed to create PMG document.");
-        }
+    @NonNull
+    private File savePmgIntoAppFolder(@NonNull Uri sourceUri, @NonNull String outputFileName) throws IOException {
+        File outputDirectory = AppStoragePaths.resolvePgmToPmgDirectory(this);
+        File outputFile = resolveUniqueFile(outputDirectory, outputFileName);
         try (InputStream inputStream = getContentResolver().openInputStream(sourceUri);
-             OutputStream outputStream = getContentResolver().openOutputStream(outputUri, "w")) {
-            if (inputStream == null || outputStream == null) {
-                throw new IOException("Failed to open document stream.");
+             OutputStream outputStream = new BufferedOutputStream(new FileOutputStream(outputFile))) {
+            if (inputStream == null) {
+                throw new FileNotFoundException("Input stream is null.");
             }
             writePmgFile(inputStream, outputStream);
         }
+        return outputFile;
     }
 
-    @Nullable
-    private File tryResolveWritableSourceFile(@NonNull Uri sourceUri) {
-        if ("file".equalsIgnoreCase(sourceUri.getScheme()) && !isNullOrEmpty(sourceUri.getPath())) {
-            return new File(sourceUri.getPath());
+    @NonNull
+    private File resolveUniqueFile(@NonNull File directory, @NonNull String fileName) {
+        File candidate = new File(directory, fileName);
+        if (!candidate.exists()) {
+            return candidate;
         }
-        if (!DocumentsContract.isDocumentUri(this, sourceUri)) {
-            return null;
-        }
-        String authority = sourceUri.getAuthority();
-        if (!"com.android.externalstorage.documents".equals(authority)) {
-            return null;
-        }
-        String decodedDocumentId = Uri.decode(DocumentsContract.getDocumentId(sourceUri));
-        if (decodedDocumentId.startsWith("raw:")) {
-            return new File(decodedDocumentId.substring(4));
-        }
-        int separatorIndex = decodedDocumentId.indexOf(':');
-        if (separatorIndex < 0) {
-            return null;
-        }
-        String volumeName = decodedDocumentId.substring(0, separatorIndex);
-        String relativePath = decodedDocumentId.substring(separatorIndex + 1);
-        if (!"primary".equalsIgnoreCase(volumeName)) {
-            return null;
-        }
-        return new File(Environment.getExternalStorageDirectory(), relativePath);
-    }
-
-    private void requestPmgFolderAccess(@NonNull Uri sourceUri, @NonNull String outputFileName) {
-        pendingPmgSourceUri = sourceUri;
-        pendingPmgOutputFileName = outputFileName;
-        convertingPmg = false;
-        updateConvertPmgButton();
-        showToast(R.string.toast_convert_pmg_select_folder);
-        Uri initialUri = buildInitialPmgFolderUri(sourceUri);
-        launcherOpenDocumentTree.launch(initialUri);
-    }
-
-    @Nullable
-    private Uri buildInitialPmgFolderUri(@NonNull Uri sourceUri) {
-        if (!DocumentsContract.isDocumentUri(this, sourceUri)) {
-            return null;
-        }
-        String authority = sourceUri.getAuthority();
-        if (isNullOrEmpty(authority)) {
-            return null;
-        }
-        String parentDocumentId = resolveParentDocumentId(DocumentsContract.getDocumentId(sourceUri));
-        return DocumentsContract.buildDocumentUri(authority, parentDocumentId);
-    }
-
-    private void continuePendingPmgSaveWithTreeUri(@NonNull Uri treeUri) {
-        Uri sourceUri = pendingPmgSourceUri;
-        String outputFileName = pendingPmgOutputFileName;
-        clearPendingPmgFolderRequest();
-        if (sourceUri == null || isNullOrEmpty(outputFileName)) {
-            showToast(R.string.toast_convert_pmg_failed);
-            return;
-        }
-        convertingPmg = true;
-        updateConvertPmgButton();
-        executorOpenFile.execute(() -> {
-            try {
-                savePmgIntoPickedTreeFolder(treeUri, sourceUri, outputFileName);
-                runOnUiThread(() -> {
-                    convertingPmg = false;
-                    updateConvertPmgButton();
-                    showToast(getString(R.string.toast_convert_pmg_success, outputFileName));
-                });
-            } catch (IOException | SecurityException | IllegalArgumentException exception) {
-                AppLogger.e(TAG, "Failed to export PMG after folder grant. treeUri=" + treeUri + ", sourceUri=" + sourceUri, exception);
-                runOnUiThread(() -> {
-                    convertingPmg = false;
-                    updateConvertPmgButton();
-                    showToast(R.string.toast_convert_pmg_failed);
-                });
+        String baseName = removeExtension(fileName);
+        String extension = getExtension(fileName);
+        int index = 2;
+        while (true) {
+            String newName = baseName + "_" + index + (extension.isEmpty() ? "" : "." + extension);
+            candidate = new File(directory, newName);
+            if (!candidate.exists()) {
+                return candidate;
             }
-        });
-    }
-
-    private void savePmgIntoPickedTreeFolder(@NonNull Uri treeUri, @NonNull Uri sourceUri, @NonNull String outputFileName) throws IOException {
-        String treeDocumentId = DocumentsContract.getTreeDocumentId(treeUri);
-        Uri targetDirectoryUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, treeDocumentId);
-        Uri outputDocumentUri = DocumentsContract.createDocument(
-                getContentResolver(),
-                targetDirectoryUri,
-                "image/x-portable-graymap",
-                outputFileName
-        );
-        if (outputDocumentUri == null) {
-            throw new IOException("Failed to create target PMG file.");
+            index++;
         }
-        try (InputStream inputStream = getContentResolver().openInputStream(sourceUri);
-             OutputStream outputStream = getContentResolver().openOutputStream(outputDocumentUri, "w")) {
-            if (inputStream == null || outputStream == null) {
-                throw new IOException("Failed to open PMG export stream.");
-            }
-            writePmgFile(inputStream, outputStream);
-        }
-    }
-
-    private void clearPendingPmgFolderRequest() {
-        pendingPmgSourceUri = null;
-        pendingPmgOutputFileName = null;
     }
 
     private void writePmgFile(@NonNull InputStream inputStream, @NonNull OutputStream outputStream) throws IOException {
@@ -759,27 +633,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
     static String buildPmgOutputFileName(@Nullable String originalFileName) {
         String normalizedFileName = isNullOrEmpty(originalFileName) ? "image" : originalFileName;
         String baseName = removeExtension(normalizedFileName);
-        String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
-        return baseName + "_" + timestamp + ".pmg";
-    }
-
-    @NonNull
-    private static String resolveParentDocumentId(@NonNull String documentId) {
-        int storageSeparatorIndex = documentId.indexOf(':');
-        if (storageSeparatorIndex >= 0) {
-            String storagePrefix = documentId.substring(0, storageSeparatorIndex + 1);
-            String relativePath = documentId.substring(storageSeparatorIndex + 1);
-            int lastSlashIndex = relativePath.lastIndexOf('/');
-            if (lastSlashIndex < 0) {
-                return storagePrefix;
-            }
-            return storagePrefix + relativePath.substring(0, lastSlashIndex);
-        }
-        int lastSlashIndex = documentId.lastIndexOf('/');
-        if (lastSlashIndex < 0) {
-            throw new IllegalArgumentException("Parent document id not found.");
-        }
-        return documentId.substring(0, lastSlashIndex);
+        return baseName + ".pmg";
     }
 
     @NonNull
@@ -789,6 +643,15 @@ public class ActivityPictureViewer extends AppCompatActivity {
             return fileName;
         }
         return fileName.substring(0, extensionSeparatorIndex);
+    }
+
+    @NonNull
+    private static String getExtension(@NonNull String fileName) {
+        int extensionSeparatorIndex = fileName.lastIndexOf('.');
+        if (extensionSeparatorIndex <= 0 || extensionSeparatorIndex == fileName.length() - 1) {
+            return "";
+        }
+        return fileName.substring(extensionSeparatorIndex + 1);
     }
 
     private void launchApkInstaller(@NonNull Uri uri) {
@@ -1067,19 +930,23 @@ public class ActivityPictureViewer extends AppCompatActivity {
     }
 
     private void recordHistory(@NonNull String uriString, @NonNull String fileName, @NonNull String filePath) {
+        recordHistory(uriString, fileName, filePath, getFileSize(Uri.parse(uriString)));
+    }
+
+    private void recordHistory(@NonNull String uriString, @NonNull String fileName, @NonNull String filePath, long fileSize) {
         for (int index = 0; index < historyRecords.size(); index++) {
             if (uriString.equals(historyRecords.get(index).uriString)) {
                 historyRecords.remove(index);
                 break;
             }
         }
-        historyRecords.add(0, new HistoryRecord(uriString, fileName, filePath));
+        historyRecords.add(0, new HistoryRecord(uriString, fileName, filePath, fileSize));
         while (historyRecords.size() > AppConfig.get().getMaxHistoryRecords()) {
             historyRecords.remove(historyRecords.size() - 1);
         }
         saveHistoryRecords();
         renderHistoryRecords();
-        AppLogger.d(TAG, "History recorded. name=" + fileName + ", path=" + filePath);
+        AppLogger.d(TAG, "History recorded. name=" + fileName + ", path=" + filePath + ", size=" + fileSize);
     }
 
     private void loadHistoryRecords() {
@@ -1099,10 +966,11 @@ public class ActivityPictureViewer extends AppCompatActivity {
                 String uriString = jsonObject.optString(JSON_KEY_URI, null);
                 String fileName = jsonObject.optString(JSON_KEY_FILE_NAME, null);
                 String filePath = jsonObject.optString(JSON_KEY_FILE_PATH, null);
+                long fileSize = jsonObject.optLong(JSON_KEY_FILE_SIZE, -1);
                 if (isNullOrEmpty(uriString) || isNullOrEmpty(fileName) || isNullOrEmpty(filePath)) {
                     continue;
                 }
-                historyRecords.add(new HistoryRecord(uriString, fileName, filePath));
+                historyRecords.add(new HistoryRecord(uriString, fileName, filePath, fileSize));
             }
             AppLogger.i(TAG, "History loaded. count=" + historyRecords.size());
         } catch (JSONException exception) {
@@ -1119,6 +987,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
                 jsonObject.put(JSON_KEY_URI, historyRecord.uriString);
                 jsonObject.put(JSON_KEY_FILE_NAME, historyRecord.fileName);
                 jsonObject.put(JSON_KEY_FILE_PATH, historyRecord.filePath);
+                jsonObject.put(JSON_KEY_FILE_SIZE, historyRecord.fileSize);
                 jsonArray.put(jsonObject);
             } catch (JSONException exception) {
                 AppLogger.e(TAG, "Skip malformed history entry while saving.", exception);
@@ -1133,8 +1002,10 @@ public class ActivityPictureViewer extends AppCompatActivity {
         for (HistoryRecord historyRecord : historyRecords) {
             View itemView = layoutInflater.inflate(R.layout.item_history_file, layoutHistoryList, false);
             TextView textViewHistoryFileName = itemView.findViewById(R.id.text_view_history_file_name);
+            TextView textViewHistoryFileSize = itemView.findViewById(R.id.text_view_history_file_size);
             TextView textViewHistoryFilePath = itemView.findViewById(R.id.text_view_history_file_path);
             textViewHistoryFileName.setText(historyRecord.fileName);
+            textViewHistoryFileSize.setText(formatFileSize(historyRecord.fileSize));
             textViewHistoryFilePath.setText(historyRecord.filePath);
             itemView.setOnClickListener(view -> openHistoryRecord(historyRecord));
             layoutHistoryList.addView(itemView);
@@ -1170,6 +1041,10 @@ public class ActivityPictureViewer extends AppCompatActivity {
     }
 
     private void updateCurrentFileInfo(@Nullable String fileName, @Nullable String filePath) {
+        updateCurrentFileInfo(fileName, filePath, -1);
+    }
+
+    private void updateCurrentFileInfo(@Nullable String fileName, @Nullable String filePath, long fileSize) {
         currentFileName = fileName == null ? "" : fileName;
         if (isNullOrEmpty(fileName)) {
             textViewCurrentFileTitle.setText(R.string.current_file_default_title);
@@ -1178,9 +1053,52 @@ public class ActivityPictureViewer extends AppCompatActivity {
         }
         if (isNullOrEmpty(filePath)) {
             textViewCurrentFilePath.setText(R.string.current_file_default_path);
-        } else {
-            textViewCurrentFilePath.setText(filePath);
+            return;
         }
+        String sizeText = formatFileSize(fileSize);
+        if (isNullOrEmpty(sizeText)) {
+            textViewCurrentFilePath.setText(filePath);
+        } else {
+            textViewCurrentFilePath.setText(filePath + " · " + sizeText);
+        }
+    }
+
+    private long getFileSize(@NonNull Uri uri) {
+        if ("file".equalsIgnoreCase(uri.getScheme())) {
+            String path = uri.getPath();
+            if (!isNullOrEmpty(path)) {
+                return new File(path).length();
+            }
+            return -1;
+        }
+        try (Cursor cursor = getContentResolver().query(uri, new String[]{OpenableColumns.SIZE}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE);
+                if (sizeIndex >= 0) {
+                    return cursor.getLong(sizeIndex);
+                }
+            }
+        } catch (SecurityException | IllegalArgumentException exception) {
+            AppLogger.e(TAG, "Failed to query file size. uri=" + uri, exception);
+        }
+        return -1;
+    }
+
+    @NonNull
+    private String formatFileSize(long size) {
+        if (size < 0) {
+            return "";
+        }
+        if (size < 1024) {
+            return size + " B";
+        }
+        if (size < 1024 * 1024) {
+            return String.format(Locale.US, "%.2f KB", size / 1024.0);
+        }
+        if (size < 1024L * 1024 * 1024) {
+            return String.format(Locale.US, "%.2f MB", size / (1024.0 * 1024.0));
+        }
+        return String.format(Locale.US, "%.2f GB", size / (1024.0 * 1024.0 * 1024.0));
     }
 
     private void updateCurrentOpenTarget(@Nullable Uri uri, @NonNull String openMode) {
@@ -1279,7 +1197,10 @@ public class ActivityPictureViewer extends AppCompatActivity {
 
     private void setHistoryPanelVisible(boolean visible) {
         layoutHistoryPanel.setVisibility(visible ? View.VISIBLE : View.GONE);
-        buttonToggleHistory.setText(visible ? R.string.hide_history : R.string.show_history);
+        viewHistoryScrim.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (historyBackCallback != null) {
+            historyBackCallback.setEnabled(visible);
+        }
     }
 
     private void setTextActionsVisible(boolean visible) {
@@ -1341,15 +1262,16 @@ public class ActivityPictureViewer extends AppCompatActivity {
             @NonNull String filePath,
             @NonNull String openMode,
             boolean saveToHistory,
-            boolean promptDeleteOnMissing
+            boolean promptDeleteOnMissing,
+            long fileSize
     ) {
         int requestId = ++currentOpenRequestId;
         AppLogger.d(TAG, "Background open started. requestId=" + requestId + ", mode=" + openMode + ", file=" + fileName);
         if (OPEN_MODE_TEXT.equals(openMode)) {
             setOpenUiEnabled(false);
             updateCurrentOpenTarget(uri, openMode);
-            updateCurrentFileInfo(fileName, filePath);
-            executorOpenFile.execute(() -> openTextFileWithPreview(uri, fileName, filePath, saveToHistory, promptDeleteOnMissing, requestId));
+            updateCurrentFileInfo(fileName, filePath, fileSize);
+            executorOpenFile.execute(() -> openTextFileWithPreview(uri, fileName, filePath, saveToHistory, promptDeleteOnMissing, requestId, fileSize));
             return;
         }
         showLoadingState();
@@ -1362,10 +1284,10 @@ public class ActivityPictureViewer extends AppCompatActivity {
                         return;
                     }
                     updateCurrentOpenTarget(uri, openMode);
-                    updateCurrentFileInfo(fileName, filePath);
+                    updateCurrentFileInfo(fileName, filePath, fileSize);
                     applyOpenedFileContent(openedFileContent);
                     if (saveToHistory) {
-                        recordHistory(uri.toString(), fileName, filePath);
+                        recordHistory(uri.toString(), fileName, filePath, fileSize);
                     }
                     setOpenUiEnabled(true);
                 });
@@ -1401,7 +1323,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
             @NonNull String filePath,
             boolean saveToHistory,
             boolean promptDeleteOnMissing,
-            int requestId
+            int requestId,
+            long fileSize
     ) {
         try (InputStream previewInputStream = getContentResolver().openInputStream(uri)) {
             if (previewInputStream == null) {
@@ -1415,7 +1338,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
                 }
                 showTextContent(previewTextResult.textContent, previewTextResult.truncated);
                 if (saveToHistory) {
-                    recordHistory(uri.toString(), fileName, filePath);
+                    recordHistory(uri.toString(), fileName, filePath, fileSize);
                 }
                 setOpenUiEnabled(true);
             });
@@ -1543,7 +1466,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
 
     private void setOpenUiEnabled(boolean enabled) {
         buttonOpenPgm.setEnabled(enabled);
-        buttonToggleHistory.setEnabled(enabled);
+        buttonOpenHistory.setEnabled(enabled);
         updateConvertPmgButton();
     }
 
@@ -2050,11 +1973,13 @@ public class ActivityPictureViewer extends AppCompatActivity {
         private final String fileName;
         @NonNull
         private final String filePath;
+        private final long fileSize;
 
-        private HistoryRecord(@NonNull String uriString, @NonNull String fileName, @NonNull String filePath) {
+        private HistoryRecord(@NonNull String uriString, @NonNull String fileName, @NonNull String filePath, long fileSize) {
             this.uriString = uriString;
             this.fileName = fileName;
             this.filePath = filePath;
+            this.fileSize = fileSize;
         }
     }
 

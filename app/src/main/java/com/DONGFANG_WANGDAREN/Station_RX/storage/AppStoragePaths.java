@@ -79,6 +79,15 @@ public final class AppStoragePaths {
     }
 
     @NonNull
+    public static File resolvePgmToPmgDirectory(@NonNull Context context) {
+        File directory = new File(resolveBaseDirectory(context), "PGM to PMG");
+        if (!directory.exists()) {
+            directory.mkdirs();
+        }
+        return directory;
+    }
+
+    @NonNull
     @SuppressWarnings("deprecation")
     private static File resolvePreferredBaseDirectory(@NonNull Context context) {
         return new File(Environment.getExternalStorageDirectory(), buildAppFolderName(context));

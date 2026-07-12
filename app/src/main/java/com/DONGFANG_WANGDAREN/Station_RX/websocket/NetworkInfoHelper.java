@@ -75,4 +75,19 @@ public final class NetworkInfoHelper {
         }
         return WifiManager.calculateSignalLevel(rssi, 5);
     }
+
+    /**
+     * Estimates the distance to the connected access point using a free-space path-loss model.
+     * Result is in meters, or -1 if unavailable. This is only a rough estimate.
+     */
+    public static double estimateWifiDistanceMeters(@NonNull Context context) {
+        int rssi = getWifiSignalDbm(context);
+        if (rssi == Integer.MIN_VALUE) {
+            return -1;
+        }
+        int txPower = -59;
+        double pathLossDb = txPower - rssi;
+        double pathLossExponent = 2.5;
+        return Math.pow(10, pathLossDb / (10.0 * pathLossExponent));
+    }
 }

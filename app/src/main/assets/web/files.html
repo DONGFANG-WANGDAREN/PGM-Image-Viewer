@@ -5,67 +5,282 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Station RX File Manager</title>
 <style>
-body{font-family:sans-serif;margin:16px;background:#0f172a;color:#f8fafc;}
-h1{font-size:20px;margin-bottom:8px;}
-nav{margin-bottom:16px;}
-nav a{color:#60a5fa;margin-right:12px;text-decoration:none;}
-#device{background:#1e293b;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;line-height:1.6;}
-#device h2{font-size:16px;margin:0 0 8px;}
-#device table{width:100%;border-collapse:collapse;}
-#device td{padding:4px 8px;border-bottom:1px solid #334155;}
-#device td:first-child{color:#94a3b8;width:40%;}
-#pathBar{background:#1e293b;border-radius:8px;padding:10px 12px;margin-bottom:12px;word-break:break-all;font-size:13px;}
-#pathBar a{color:#60a5fa;text-decoration:none;margin-right:4px;}
-#list{background:#1e293b;border-radius:8px;overflow:hidden;}
-.item{display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid #334155;cursor:pointer;}
-.item:hover{background:#334155;}
-.item:last-child{border-bottom:none;}
-.icon{width:24px;text-align:center;margin-right:10px;font-size:16px;}
-.name{flex:1;word-break:break-all;font-size:14px;}
-.meta{color:#94a3b8;font-size:12px;text-align:right;white-space:nowrap;margin-left:8px;}
-.actions a{color:#60a5fa;text-decoration:none;margin-left:10px;font-size:12px;}
-#preview{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);display:none;align-items:center;justify-content:center;z-index:1000;flex-direction:column;}
-#previewContent{max-width:90%;max-height:80%;overflow:auto;background:#1e293b;border-radius:8px;padding:16px;}
-#preview img{max-width:100%;max-height:70vh;}
-#preview pre{white-space:pre-wrap;word-break:break-all;font-family:monospace;font-size:13px;}
-#previewClose{position:absolute;top:16px;right:16px;color:#fff;font-size:24px;cursor:pointer;}
-#uploadBar{margin-bottom:12px;}
-#uploadButton{padding:8px 16px;border:none;border-radius:6px;background:#22c55e;color:#fff;cursor:pointer;font-size:14px;}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  background: #f8fafc;
+  color: #1e293b;
+  display: flex;
+}
+#sidebar {
+  width: 320px;
+  min-width: 260px;
+  background: #ffffff;
+  border-right: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#brand {
+  padding: 20px 24px;
+  border-bottom: 1px solid #f1f5f9;
+}
+#brand h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+}
+#brand p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+#deviceScroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+.device-section {
+  margin-bottom: 24px;
+}
+.device-section h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+.device-card {
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  padding: 14px;
+}
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 13px;
+}
+.info-row:last-child { border-bottom: none; }
+.info-label { color: #64748b; }
+.info-value { color: #0f172a; font-weight: 500; text-align: right; max-width: 60%; word-break: break-word; }
+.distance-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.distance-near { background: #dcfce7; color: #166534; }
+.distance-mid { background: #fef9c3; color: #854d0e; }
+.distance-far { background: #fee2e2; color: #991b1b; }
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+#topBar {
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+#pathBar {
+  flex: 1;
+  font-size: 14px;
+  color: #334155;
+  word-break: break-all;
+}
+#pathBar a { color: #2563eb; text-decoration: none; margin-right: 4px; }
+#pathBar a:hover { text-decoration: underline; }
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-primary { background: #2563eb; color: #fff; }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+#content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+#transfers {
+  margin-bottom: 16px;
+}
+.transfer {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.transfer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.transfer-name { font-weight: 600; color: #0f172a; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.transfer-meta { color: #64748b; }
+.progress-track {
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #2563eb);
+  width: 0%;
+  transition: width 0.2s ease;
+}
+#listCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.item:last-child { border-bottom: none; }
+.item:hover { background: #f8fafc; }
+.icon { width: 28px; text-align: center; margin-right: 12px; font-size: 18px; }
+.name { flex: 1; word-break: break-all; font-size: 14px; color: #0f172a; }
+.meta { color: #64748b; font-size: 12px; text-align: right; white-space: nowrap; margin-left: 12px; }
+.actions a { color: #2563eb; text-decoration: none; margin-left: 12px; font-size: 12px; font-weight: 600; }
+.actions a:hover { text-decoration: underline; }
+.empty { padding: 32px; text-align: center; color: #94a3b8; font-size: 14px; }
+#listCard.drag-over { border: 2px dashed #2563eb; background: #eff6ff; }
+.item.drop-target { background: #eff6ff; outline: 2px dashed #2563eb; outline-offset: -2px; }
+#dropOverlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(37, 99, 235, 0.08);
+  border: 4px dashed #2563eb;
+  display: none; align-items: center; justify-content: center;
+  z-index: 999; pointer-events: none;
+  font-size: 18px; font-weight: 600; color: #2563eb;
+}
+#preview {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(15, 23, 42, 0.85);
+  display: none; align-items: center; justify-content: center;
+  z-index: 1000; flex-direction: column;
+}
+#previewContent {
+  max-width: 90%; max-height: 85%;
+  overflow: auto; background: #fff; border-radius: 12px; padding: 20px;
+  box-shadow: 0 24px 48px rgba(0,0,0,0.2);
+}
+#preview img { max-width: 100%; max-height: 70vh; }
+#preview pre { white-space: pre-wrap; word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+#previewClose { position: absolute; top: 20px; right: 24px; color: #fff; font-size: 28px; cursor: pointer; }
+@media (max-width: 900px) {
+  #sidebar { width: 100%; position: absolute; z-index: 100; height: 100%; transform: translateX(-100%); transition: transform 0.2s ease; }
+  #sidebar.open { transform: translateX(0); }
+}
 </style>
 </head>
 <body>
-<nav><a href="/files">File Manager</a><a href="#device">Android</a></nav>
-<h1>File Manager</h1>
-<div id="device"><h2>Device Info</h2><div id="deviceContent">Loading...</div></div>
-<div id="pathBar"></div>
-<div id="uploadBar"><button id="uploadButton" onclick="selectUpload()">Upload</button><input type="file" id="uploadInput" style="display:none" onchange="doUpload()"></div>
-<div id="list">Loading...</div>
+<div id="sidebar">
+  <div id="brand">
+    <h1>Station RX</h1>
+    <p>Wireless File Manager</p>
+  </div>
+  <div id="deviceScroll">
+    <div class="device-section">
+      <h3>Device</h3>
+      <div class="device-card" id="deviceContent">Loading...</div>
+    </div>
+    <div class="device-section">
+      <h3>Network</h3>
+      <div class="device-card" id="networkContent">Loading...</div>
+    </div>
+  </div>
+</div>
+<div id="main">
+  <div id="topBar">
+    <button class="btn btn-primary" id="uploadButton" onclick="selectUpload()">Upload</button>
+    <input type="file" id="uploadInput" style="display:none" onchange="doUpload()">
+    <div id="pathBar"></div>
+  </div>
+  <div id="content">
+    <div id="transfers"></div>
+    <div id="listCard"><div class="empty">Loading...</div></div>
+  </div>
+</div>
 <div id="preview"><div id="previewClose" onclick="closePreview()">&times;</div><div id="previewContent"></div></div>
+<div id="dropOverlay">Drop files here to upload</div>
 <script>
+const CHUNK_SIZE = 2 * 1024 * 1024;
 let currentPath='';
+let uploadCounter = 0;
 function selectUpload(){document.getElementById('uploadInput').click();}
-async function doUpload(){const input=document.getElementById('uploadInput');if(!input.files.length)return;const file=input.files[0];const form=new FormData();form.append('path',currentPath);form.append('file',file);try{const r=await fetch('/api/upload',{method:'POST',body:form});const d=await r.json();if(d.success){loadFileList(currentPath);}else{alert('Upload failed');}}catch(e){alert('Upload error: '+e);}input.value='';}
-function formatBytes(b){if(b<1024)return b+' B';if(b<1024*1024)return (b/1024).toFixed(2)+' KB';return (b/(1024*1024)).toFixed(2)+' MB';}
-async function loadDevice(){try{const r=await fetch('/api/device');const d=await r.json();let html='<table>';
-html+='<tr><td>Model</td><td>'+escape(d.manufacturer+' '+d.model)+'</td></tr>';
-html+='<tr><td>Android</td><td>'+escape(d.androidVersion)+' (SDK '+d.sdk+')</td></tr>';
-if(d.display){html+='<tr><td>Display</td><td>'+d.display.widthPixels+' x '+d.display.heightPixels+' @ '+d.display.densityDpi+'dpi</td></tr>';}
-if(d.memory){html+='<tr><td>RAM</td><td>Total '+formatBytes(d.memory.totalRam)+', Available '+formatBytes(d.memory.availableRam)+'</td></tr>';
-html+='<tr><td>Storage</td><td>Total '+formatBytes(d.memory.totalStorage)+', Available '+formatBytes(d.memory.availableStorage)+'</td></tr>';}
-if(d.battery){html+='<tr><td>Battery</td><td>'+d.battery.level+'%'+(d.battery.plugged>0?' (charging)':'')+'</td></tr>';}
-if(d.cpu){html+='<tr><td>CPU</td><td>'+d.cpu.cores+' cores, '+(d.cpu.usage>=0?d.cpu.usage.toFixed(2)+'%':'N/A')+'</td></tr>';}
-if(d.network){html+='<tr><td>Network</td><td>IP '+escape(d.network.localIp)+(d.network.wifiConnected?' · WiFi '+d.network.wifiLinkSpeedMbps+'Mbps · '+d.network.wifiSignalDbm+'dBm':'')+'</td></tr>';}
-html+='</table>';document.getElementById('deviceContent').innerHTML=html;}catch(e){document.getElementById('deviceContent').textContent='Error loading device info.';}}
+function formatBytes(b){if(b<0||b==null)return '-';if(b<1024)return b+' B';if(b<1024*1024)return (b/1024).toFixed(2)+' KB';if(b<1024*1024*1024)return (b/(1024*1024)).toFixed(2)+' MB';return (b/(1024*1024*1024)).toFixed(2)+' GB';}
+function formatNumber(n){if(n==null||isNaN(n))return '-';return n.toLocaleString();}
+function distanceClass(d){if(d==null||d<0)return 'distance-far';if(d<1)return 'distance-near';if(d<5)return 'distance-mid';return 'distance-far';}
+function distanceText(d){if(d==null||d<0)return 'Unknown';if(d<1)return (d*100).toFixed(0)+' cm';if(d<1000)return d.toFixed(1)+' m';return (d/1000).toFixed(2)+' km';}
+function infoRow(label,value){return '<div class="info-row"><span class="info-label">'+escape(label)+'</span><span class="info-value">'+value+'</span></div>';}
+async function loadDevice(){try{const r=await fetch('/api/device');const d=await r.json();let html='';html+=infoRow('Model',escape(d.manufacturer+' '+d.model));html+=infoRow('Android',escape(d.androidVersion)+' (SDK '+d.sdk+')');if(d.display){html+=infoRow('Display',d.display.widthPixels+' x '+d.display.heightPixels);}if(d.memory){html+=infoRow('RAM Total',formatBytes(d.memory.totalRam));html+=infoRow('RAM Free',formatBytes(d.memory.availableRam));html+=infoRow('Storage Total',formatBytes(d.memory.totalStorage));html+=infoRow('Storage Free',formatBytes(d.memory.availableStorage));}if(d.battery){html+=infoRow('Battery',d.battery.level+'%'+(d.battery.plugged>0?' charging':''));}if(d.cpu){html+=infoRow('CPU',d.cpu.cores+' cores');}document.getElementById('deviceContent').innerHTML=html||'No data';
+let nhtml='';if(d.network){nhtml+=infoRow('Local IP',escape(d.network.localIp));nhtml+=infoRow('WiFi',d.network.wifiConnected?'Connected':'-');if(d.network.wifiConnected){nhtml+=infoRow('Link Speed',formatNumber(d.network.wifiLinkSpeedMbps)+' Mbps');nhtml+=infoRow('Signal',d.network.wifiSignalDbm+' dBm');const cls=distanceClass(d.network.estimatedDistanceMeters);const txt=distanceText(d.network.estimatedDistanceMeters);nhtml+=infoRow('Distance','<span class="distance-badge '+cls+'">'+txt+'</span>');}}document.getElementById('networkContent').innerHTML=nhtml||'No network data';}catch(e){document.getElementById('deviceContent').innerHTML='Error';document.getElementById('networkContent').innerHTML='Error';}}
 function escape(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
 function buildPathBar(path){const parts=path.split('/').filter(Boolean);let html='<a href="#" onclick="loadFileList(&quot;&quot;);return false;">Storage</a>';let acc='';for(let p of parts){acc+='/'+p;html+='/';html+='<a href="#" onclick="loadFileList(&quot;'+escape(acc)+'&quot;);return false;">'+escape(p)+'</a>';}document.getElementById('pathBar').innerHTML=html;}
-async function loadFileList(path){currentPath=path||'';try{const r=await fetch('/api/files?path='+encodeURIComponent(currentPath));const d=await r.json();buildPathBar(d.path);let html='';if(d.parent){html+='<div class="item" onclick="loadFileList(&quot;'+escape(d.parent)+'&quot;)"><span class="icon">&#8593;</span><span class="name">..</span></div>';}
-for(const f of d.files){if(f.directory){html+='<div class="item" onclick="loadFileList(&quot;'+escape(f.path)+'&quot;)"><span class="icon">&#128193;</span><span class="name">'+escape(f.name)+'</span><span class="meta">'+f.modified+'</span></div>';}
-else{html+='<div class="item" onclick="viewFile(&quot;'+escape(f.path)+'&quot;,&quot;'+escape(f.name)+'&quot;)"><span class="icon">&#128196;</span><span class="name">'+escape(f.name)+'</span><span class="meta">'+formatBytes(f.size)+' · '+f.modified+'</span><span class="actions" onclick="event.stopPropagation()"><a href="/api/download?path='+encodeURIComponent(f.path)+'" download>Download</a></span></div>';}
-}document.getElementById('list').innerHTML=html||'<div style="padding:12px;color:#94a3b8">Empty folder</div>';}catch(e){document.getElementById('list').textContent='Error loading files.';}}
-async function viewFile(path,name){const lower=name.toLowerCase();const isImage=/\.(jpg|jpeg|png|gif|webp|bmp|heic|heif)$/.test(lower);const isText=/\.(txt|json|xml|md|java|kt|swift|csv|log|ini|cfg|conf|properties|gradle|css|js|ts|html|htm|yaml|yml)$/.test(lower);const content=document.getElementById('previewContent');if(isImage){content.innerHTML='<img src="/api/view?path='+encodeURIComponent(path)+'" alt="'+escape(name)+'">';}
-else if(isText){try{const r=await fetch('/api/view?path='+encodeURIComponent(path));const t=await r.text();content.innerHTML='<pre>'+escape(t)+'</pre>';}catch(e){content.textContent='Error reading file.';}}
-else{content.innerHTML='<p>Preview not available. Use Download.</p><a href="/api/download?path='+encodeURIComponent(path)+'" download>Download '+escape(name)+'</a>';}
-document.getElementById('preview').style.display='flex';}
+async function loadFileList(path){currentPath=path||'';try{const r=await fetch('/api/files?path='+encodeURIComponent(currentPath));const d=await r.json();buildPathBar(d.path);let html='';if(d.parent){html+='<div class="item" onclick="loadFileList(&quot;'+escape(d.parent)+'&quot;)"><span class="icon">&#8593;</span><span class="name">..</span></div>';}for(const f of d.files){if(f.directory){html+='<div class="item folder-item" draggable="true" data-path="'+escape(f.path)+'" onclick="loadFileList(&quot;'+escape(f.path)+'&quot;)"><span class="icon">&#128193;</span><span class="name">'+escape(f.name)+'</span><span class="meta">'+f.modified+'</span></div>';}else{html+='<div class="item" onclick="viewFile(&quot;'+escape(f.path)+'&quot;,&quot;'+escape(f.name)+'&quot;)"><span class="icon">&#128196;</span><span class="name">'+escape(f.name)+'</span><span class="meta">'+formatBytes(f.size)+' &middot; '+f.modified+'</span><span class="actions" onclick="event.stopPropagation()"><a href="#" onclick="downloadFile(&quot;'+escape(f.path)+'&quot;,&quot;'+escape(f.name)+'&quot;);return false;">Download</a></span></div>';}}document.getElementById('listCard').innerHTML=html||'<div class="empty">Empty folder</div>';setupDragAndDrop();}catch(e){document.getElementById('listCard').innerHTML='<div class="empty">Error loading files.</div>';}}
+function createTransfer(name,total){const id='transfer-'+(++uploadCounter);const el=document.createElement('div');el.className='transfer';el.id=id;el.innerHTML='<div class="transfer-header"><span class="transfer-name">'+escape(name)+'</span><span class="transfer-meta" id="'+id+'-meta">0%</span></div><div class="progress-track"><div class="progress-fill" id="'+id+'-bar"></div></div>';document.getElementById('transfers').appendChild(el);return {id,total,loaded:0,setProgress(loaded){this.loaded=loaded;const pct=this.total?Math.min(100,(loaded/this.total)*100).toFixed(1):0;document.getElementById(id+'-bar').style.width=pct+'%';document.getElementById(id+'-meta').textContent=formatBytes(loaded)+(this.total?' / '+formatBytes(this.total)+' ('+pct+'%)':' / '+formatBytes(loaded));},finish(msg){document.getElementById(id+'-bar').style.width='100%';document.getElementById(id+'-meta').textContent=msg||'Done';setTimeout(()=>el.remove(),4000);},error(msg){document.getElementById(id+'-bar').style.background='#ef4444';document.getElementById(id+'-meta').textContent=msg||'Failed';}}};
+async function doUpload(){const input=document.getElementById('uploadInput');if(!input.files.length)return;await uploadFile(input.files[0],currentPath);input.value='';}
+async function uploadFile(file,targetPath){const transfer=createTransfer(file.name,file.size);const uploadId=generateId();try{const initRes=await fetch('/api/upload-init?path='+encodeURIComponent(targetPath)+'&name='+encodeURIComponent(file.name)+'&id='+uploadId);const init=await initRes.json();if(!init.success)throw new Error(init.error||'init failed');const totalChunks=Math.ceil(file.size/CHUNK_SIZE);for(let i=0;i<totalChunks;i++){const start=i*CHUNK_SIZE;const end=Math.min(file.size,start+CHUNK_SIZE);const chunk=file.slice(start,end);const form=new FormData();form.append('id',uploadId);form.append('index',String(i));form.append('chunk',chunk,'chunk');const r=await fetch('/api/upload-chunk',{method:'POST',body:form});const d=await r.json();if(!d.success)throw new Error(d.error||'chunk failed');transfer.setProgress(Math.min(file.size,(i+1)*CHUNK_SIZE));}const finishRes=await fetch('/api/upload-finish',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'id='+encodeURIComponent(uploadId)});const finish=await finishRes.json();if(!finish.success)throw new Error(finish.error||'finish failed');transfer.finish('Saved as '+escape(finish.name));loadFileList(currentPath);}catch(e){transfer.error('Upload error: '+e.message);}}
+function generateId(){const arr=new Uint8Array(12);crypto.getRandomValues(arr);return Array.from(arr,b=>b.toString(16).padStart(2,'0')).join('');}
+function setupDragAndDrop(){
+  const listCard=document.getElementById('listCard');
+  const overlay=document.getElementById('dropOverlay');
+  const folderItems=document.querySelectorAll('.folder-item');
+  let dragCounter=0;
+  function handleDragOver(e){e.preventDefault();e.dataTransfer.dropEffect='copy';}
+  function handleDragEnter(e){e.preventDefault();dragCounter++;overlay.style.display='flex';}
+  function handleDragLeave(e){e.preventDefault();dragCounter--;if(dragCounter<=0){dragCounter=0;overlay.style.display='none';}}
+  async function handleDrop(e){e.preventDefault();dragCounter=0;overlay.style.display='none';listCard.classList.remove('drag-over');folderItems.forEach(el=>el.classList.remove('drop-target'));const files=e.dataTransfer.files;if(!files.length)return;let targetPath=currentPath;const folderEl=e.target.closest('.folder-item');if(folderEl){targetPath=folderEl.getAttribute('data-path');}for(const file of files){await uploadFile(file,targetPath);}}
+  document.body.addEventListener('dragenter',handleDragEnter);
+  document.body.addEventListener('dragover',handleDragOver);
+  document.body.addEventListener('dragleave',handleDragLeave);
+  document.body.addEventListener('drop',handleDrop);
+  listCard.addEventListener('dragenter',(e)=>{e.preventDefault();e.stopPropagation();listCard.classList.add('drag-over');});
+  listCard.addEventListener('dragleave',(e)=>{e.preventDefault();e.stopPropagation();listCard.classList.remove('drag-over');});
+  listCard.addEventListener('drop',(e)=>{e.preventDefault();e.stopPropagation();listCard.classList.remove('drag-over');});
+  folderItems.forEach(el=>{
+    el.addEventListener('dragenter',(e)=>{e.preventDefault();e.stopPropagation();el.classList.add('drop-target');});
+    el.addEventListener('dragleave',(e)=>{e.preventDefault();e.stopPropagation();el.classList.remove('drop-target');});
+    el.addEventListener('drop',(e)=>{e.preventDefault();e.stopPropagation();el.classList.remove('drop-target');});
+  });
+}
+async function downloadFile(path,name){const transfer=createTransfer(name,0);try{const head=await fetch('/api/download?path='+encodeURIComponent(path),{method:'HEAD'});const total=parseInt(head.headers.get('Content-Length')||'0');if(total)transfer.total=total;let received=0;const response=await fetch('/api/download?path='+encodeURIComponent(path));const reader=response.body.getReader();const stream=new ReadableStream({start(controller){function push(){reader.read().then(({done,value})=>{if(done){controller.close();return;}received+=value.length;transfer.setProgress(received);controller.enqueue(value);push();}).catch(err=>{controller.error(err);});}push();}});const blob=await new Response(stream).blob();const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);transfer.finish('Downloaded '+formatBytes(received));}catch(e){transfer.error('Download error: '+e.message);}}
+async function viewFile(path,name){const lower=name.toLowerCase();const isImage=/\.(jpg|jpeg|png|gif|webp|bmp|heic|heif)$/.test(lower);const isText=/\.(txt|json|xml|md|java|kt|swift|csv|log|ini|cfg|conf|properties|gradle|css|js|ts|html|htm|yaml|yml)$/.test(lower);const content=document.getElementById('previewContent');if(isImage){content.innerHTML='<img src="/api/view?path='+encodeURIComponent(path)+'" alt="'+escape(name)+'">';}else if(isText){try{const r=await fetch('/api/view?path='+encodeURIComponent(path));const t=await r.text();content.innerHTML='<pre>'+escape(t)+'</pre>';}catch(e){content.textContent='Error reading file.';}}else{content.innerHTML='<p>Preview not available.</p><a href="#" onclick="downloadFile(&quot;'+escape(path)+'&quot;,&quot;'+escape(name)+'&quot;);return false;">Download '+escape(name)+'</a>';}document.getElementById('preview').style.display='flex';}
 function closePreview(){document.getElementById('preview').style.display='none';document.getElementById('previewContent').innerHTML='';}
 loadDevice();loadFileList();
 </script>

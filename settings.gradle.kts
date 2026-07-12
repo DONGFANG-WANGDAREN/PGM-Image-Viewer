@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Reader RX"
+rootProject.name = "Station RX"
 include(":app")

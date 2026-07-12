@@ -1,6 +1,6 @@
 {
   "storage": {
-    "appFolderName": "Reader RX",
+    "appFolderName": "Station RX",
     "logsFolder": "Log",
     "historyFolder": "History",
     "webSocketChatFolder": "WebSocket/Chat",
@@ -21,7 +21,7 @@
   "websocket": {
     "port": 8080,
     "httpPort": 8081,
-    "senderApp": "Reader RX",
+    "senderApp": "Station RX",
     "senderSystem": "System",
     "messageTypeText": "text",
     "messageTypeImage": "image",

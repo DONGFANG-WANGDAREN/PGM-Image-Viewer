@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Reader RX</string>
+    <string name="app_name">Station RX</string>
     <string name="open_supported_file">Open File</string>
     <string name="empty_state_title">No File Opened Yet</string>
     <string name="empty_state_message">Select a local file to view.</string>

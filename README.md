@@ -1,6 +1,6 @@
-# Reader RX
+# Station RX
 
-`Reader RX` is an Android local file reader built to open a wide range of common file types from one place.
+`Station RX` is an Android local file reader built to open a wide range of common file types from one place.
 
 It can open files from the in-app picker and also receive system `VIEW` intents as an "Open with" target.
 
@@ -103,13 +103,13 @@ The dashboard shows the running local service and, when opened, displays real-ti
 Every time the chat room is opened, a new chat log file is created at:
 
 ```
-/Reader RX/WebSocket/Chat/yyyy-MM-dd/Chat_HH-mm-ss_yyyy-MM-dd.txt
+/Station RX/WebSocket/Chat/yyyy-MM-dd/Chat_HH-mm-ss_yyyy-MM-dd.txt
 ```
 
 Sent images are stored separately at:
 
 ```
-/Reader RX/WebSocket/Chat/Images/
+/Station RX/WebSocket/Chat/Images/
 ```
 
 Logs are written in plain text and are not loaded back into the app.
@@ -118,7 +118,7 @@ Logs are written in plain text and are not loaded back into the app.
 
 Folder names, file naming formats, and many runtime constants are centralized in [`app_config.json`](app/src/main/assets/app_config.json). The file is loaded when the app starts and covers:
 
-- Storage folder names (`Reader RX`, `Log`, `History`, `WebSocket/Chat`, `Images`).
+- Storage folder names (`Station RX`, `Log`, `History`, `WebSocket/Chat`, `Images`).
 - Log, history, and chat file naming formats.
 - WebSocket and HTTP ports, sender names, message types, and image URL prefix.
 - Text preview limits, history record limits, and text size range.
@@ -134,7 +134,7 @@ When editing naming formats, any non-date literal (for example `Log_` or `Chat_`
 Runtime logs are written to external storage so they can be inspected without Android Studio:
 
 ```
-/Reader RX/Log/yyyy-MM-dd/Log_HH-mm_yyyy-MM-dd.txt
+/Station RX/Log/yyyy-MM-dd/Log_HH-mm_yyyy-MM-dd.txt
 ```
 
 A new file is created each time the app starts. Logs follow the Android Studio Logcat format.

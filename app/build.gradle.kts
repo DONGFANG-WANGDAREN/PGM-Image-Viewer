@@ -3,13 +3,13 @@ plugins {
 }
 
 android {
-    namespace = "com.DONGFANG_WANGDAREN.Reader_RX"
+    namespace = "com.DONGFANG_WANGDAREN.Station_RX"
     compileSdk {
         version = release(36)
     }
 
     defaultConfig {
-        applicationId = "com.DONGFANG_WANGDAREN.Reader_RX"
+        applicationId = "com.DONGFANG_WANGDAREN.Station_RX"
         minSdk = 33
         targetSdk = 36
         versionCode = 26_0712_02_1

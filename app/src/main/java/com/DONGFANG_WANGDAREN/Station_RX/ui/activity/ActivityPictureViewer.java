@@ -4,11 +4,11 @@ package com.DONGFANG_WANGDAREN.Station_RX.ui.activity;
 import com.DONGFANG_WANGDAREN.Station_RX.R;
 import com.DONGFANG_WANGDAREN.Station_RX.app.AppConfig;
 import com.DONGFANG_WANGDAREN.Station_RX.app.AppLogger;
-import com.DONGFANG_WANGDAREN.Station_RX.storage.AppStoragePaths;
 import com.DONGFANG_WANGDAREN.Station_RX.reader.ParserPicturePgm;
 import com.DONGFANG_WANGDAREN.Station_RX.reader.ReaderDocumentDocx;
 import com.DONGFANG_WANGDAREN.Station_RX.reader.ReaderTableExcel;
 import com.DONGFANG_WANGDAREN.Station_RX.reader.ReaderTextPlain;
+import com.DONGFANG_WANGDAREN.Station_RX.storage.AppStoragePaths;
 import com.DONGFANG_WANGDAREN.Station_RX.ui.view.ViewPictureZoom;
 import com.DONGFANG_WANGDAREN.Station_RX.ui.view.ViewSeekBarVertical;
 import android.content.ActivityNotFoundException;
@@ -69,13 +69,10 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.StringReader;
 import java.io.StringWriter;
@@ -119,7 +116,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private ActivityResultLauncher<Intent> launcherManageAllFilesAccess;
     private MaterialButton buttonOpenPgm;
     private MaterialButton buttonOpenWebSocket;
-    private MaterialButton buttonConvertPmg;
     private ViewPictureZoom viewPictureZoom;
     private View layoutTextSearch;
     private EditText editTextSearch;
@@ -170,7 +166,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private boolean currentTextSupportsPrettyPrint;
     private boolean currentTextPrettyPrinted;
     private boolean markdownPreviewMode;
-    private boolean convertingPmg;
     private boolean updatingTextQuickScrollFromCode;
     private boolean startupIntentHandled;
     private float currentTextSizeSp = AppConfig.get().getDefaultTextSizeSp();
@@ -216,7 +211,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
 
         buttonOpenPgm = findViewById(R.id.button_open_pgm);
         buttonOpenWebSocket = findViewById(R.id.button_open_websocket);
-        buttonConvertPmg = findViewById(R.id.button_convert_pmg);
         viewPictureZoom = findViewById(R.id.view_picture_zoom);
         layoutTextSearch = findViewById(R.id.layout_text_search);
         editTextSearch = findViewById(R.id.edit_text_search);
@@ -264,7 +258,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
             setHistoryPanelVisible(false);
             startActivity(new Intent(this, ActivityTools.class));
         });
-        buttonConvertPmg.setOnClickListener(view -> convertCurrentPgmToPmgFile());
         buttonOpenHistory.setOnClickListener(view -> setHistoryPanelVisible(true));
         viewHistoryScrim.setOnClickListener(view -> setHistoryPanelVisible(false));
         buttonSearchPrevious.setOnClickListener(view -> moveToSearchMatch(-1));
@@ -554,106 +547,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
                 .show();
     }
 
-    private void convertCurrentPgmToPmgFile() {
-        Uri sourceUri = currentOpenedFileUri;
-        if (!isCurrentPgmSourceFile() || sourceUri == null || convertingPmg) {
-            return;
-        }
-        String outputFileName = buildPmgOutputFileName(currentFileName);
-        convertingPmg = true;
-        updateConvertPmgButton();
-        executorOpenFile.execute(() -> {
-            try {
-                File outputFile = savePmgIntoAppFolder(sourceUri, outputFileName);
-                runOnUiThread(() -> {
-                    convertingPmg = false;
-                    updateConvertPmgButton();
-                    showToast(getString(R.string.toast_convert_pmg_success, outputFile.getName()));
-                });
-            } catch (IOException | IllegalArgumentException | SecurityException exception) {
-                AppLogger.e(TAG, "Failed to convert PGM to PMG. uri=" + sourceUri, exception);
-                runOnUiThread(() -> {
-                    convertingPmg = false;
-                    updateConvertPmgButton();
-                    showToast(R.string.toast_convert_pmg_failed);
-                });
-            }
-        });
-    }
-
-    @NonNull
-    private File savePmgIntoAppFolder(@NonNull Uri sourceUri, @NonNull String outputFileName) throws IOException {
-        File outputDirectory = AppStoragePaths.resolvePgmToPmgDirectory(this);
-        File outputFile = resolveUniqueFile(outputDirectory, outputFileName);
-        try (InputStream inputStream = getContentResolver().openInputStream(sourceUri);
-             OutputStream outputStream = new BufferedOutputStream(new FileOutputStream(outputFile))) {
-            if (inputStream == null) {
-                throw new FileNotFoundException("Input stream is null.");
-            }
-            writePmgFile(inputStream, outputStream);
-        }
-        return outputFile;
-    }
-
-    @NonNull
-    private File resolveUniqueFile(@NonNull File directory, @NonNull String fileName) {
-        File candidate = new File(directory, fileName);
-        if (!candidate.exists()) {
-            return candidate;
-        }
-        String baseName = removeExtension(fileName);
-        String extension = getExtension(fileName);
-        int index = 2;
-        while (true) {
-            String newName = baseName + "_" + index + (extension.isEmpty() ? "" : "." + extension);
-            candidate = new File(directory, newName);
-            if (!candidate.exists()) {
-                return candidate;
-            }
-            index++;
-        }
-    }
-
-    private void writePmgFile(@NonNull InputStream inputStream, @NonNull OutputStream outputStream) throws IOException {
-        ParserPicturePgm.DataPicturePgm dataPicturePgm = ParserPicturePgm.parse(inputStream);
-        String header = "P5\n"
-                + dataPicturePgm.getWidth()
-                + " "
-                + dataPicturePgm.getHeight()
-                + "\n255\n";
-        outputStream.write(header.getBytes(StandardCharsets.US_ASCII));
-        int[] argbPixels = dataPicturePgm.getArgbPixels();
-        for (int argbPixel : argbPixels) {
-            outputStream.write(argbPixel & 0xFF);
-        }
-        outputStream.flush();
-    }
-
-    @NonNull
-    static String buildPmgOutputFileName(@Nullable String originalFileName) {
-        String normalizedFileName = isNullOrEmpty(originalFileName) ? "image" : originalFileName;
-        String baseName = removeExtension(normalizedFileName);
-        return baseName + ".pmg";
-    }
-
-    @NonNull
-    private static String removeExtension(@NonNull String fileName) {
-        int extensionSeparatorIndex = fileName.lastIndexOf('.');
-        if (extensionSeparatorIndex <= 0) {
-            return fileName;
-        }
-        return fileName.substring(0, extensionSeparatorIndex);
-    }
-
-    @NonNull
-    private static String getExtension(@NonNull String fileName) {
-        int extensionSeparatorIndex = fileName.lastIndexOf('.');
-        if (extensionSeparatorIndex <= 0 || extensionSeparatorIndex == fileName.length() - 1) {
-            return "";
-        }
-        return fileName.substring(extensionSeparatorIndex + 1);
-    }
-
     private void launchApkInstaller(@NonNull Uri uri) {
         Intent intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
         intent.setData(uri);
@@ -817,7 +710,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
         layoutEmptyState.setVisibility(View.GONE);
         viewPictureZoom.setVisibility(View.VISIBLE);
         viewPictureZoom.setBitmap(bitmap);
-        updateConvertPmgButton();
         setTextQuickScrollVisible(false);
     }
 
@@ -837,7 +729,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
         exoPlayer.setMediaItem(MediaItem.fromUri(uri));
         exoPlayer.prepare();
         exoPlayer.play();
-        updateConvertPmgButton();
         setTextQuickScrollVisible(false);
     }
 
@@ -907,7 +798,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
         updateTextActionButtons();
         applyCurrentTextZoom();
         applyCurrentTextPresentation();
-        updateConvertPmgButton();
         scheduleTextQuickScrollUpdate();
     }
 
@@ -1104,23 +994,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private void updateCurrentOpenTarget(@Nullable Uri uri, @NonNull String openMode) {
         currentOpenedFileUri = uri;
         currentOpenMode = openMode;
-        updateConvertPmgButton();
-    }
-
-    private void updateConvertPmgButton() {
-        boolean shouldShow = isCurrentPgmSourceFile()
-                && currentOpenedFileUri != null
-                && viewPictureZoom.getVisibility() == View.VISIBLE;
-        buttonConvertPmg.setVisibility(shouldShow ? View.VISIBLE : View.GONE);
-        buttonConvertPmg.setEnabled(shouldShow && !convertingPmg);
-    }
-
-    private boolean isCurrentPgmSourceFile() {
-        if (!OPEN_MODE_PGM.equals(currentOpenMode)) {
-            return false;
-        }
-        String normalizedFileName = currentFileName == null ? "" : currentFileName.toLowerCase(Locale.US);
-        return normalizedFileName.endsWith(".pgm");
     }
 
     private void scheduleTextQuickScrollUpdate() {
@@ -1448,7 +1321,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
 
     private void showLoadingState() {
         setOpenUiEnabled(false);
-        convertingPmg = false;
         updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
         stopMediaPlayback();
         setTextSearchVisible(false);
@@ -1467,7 +1339,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private void setOpenUiEnabled(boolean enabled) {
         buttonOpenPgm.setEnabled(enabled);
         buttonOpenHistory.setEnabled(enabled);
-        updateConvertPmgButton();
     }
 
     private void tryTakePersistableReadPermission(@NonNull Uri uri, int flags) {

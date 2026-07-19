@@ -30,7 +30,6 @@
     <string name="dialog_apk_install_message">这是 APK 安装包，是否跳转到系统安装页面？</string>
     <string name="dialog_yes">是</string>
     <string name="dialog_no">否</string>
-    <string name="convert_pmg">转 PMG</string>
     <string name="search_hint">搜索文本内容</string>
     <string name="search_no_result">0 / 0</string>
     <string name="search_previous">上一个</string>
@@ -40,8 +39,6 @@
     <string name="loading_message">大文件会在后台打开，避免界面卡顿。</string>
     <string name="toast_storage_permission_required">请先授予“所有文件访问权限”再使用本软件。</string>
     <string name="toast_storage_permission_denied">必须授予“所有文件访问权限”，软件将关闭。</string>
-    <string name="toast_convert_pmg_success">PMG 已保存：%1$s</string>
-    <string name="toast_convert_pmg_failed">保存 PMG 文件失败。</string>
     <string name="text_scroll_position_initial">0%%</string>
     <string name="text_scroll_position">%1$d%%</string>
     <string name="text_preview_truncated_notice">[预览内容过大，已截断显示以保持流畅。]</string>

@@ -10,6 +10,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.view.LayoutInflater;
@@ -34,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 public class ActivityWebSocketDashboard extends AppCompatActivity {
 
     private static final String TAG = "ActivityWebSocketDashboard";
+    private static final int DASHBOARD_ITEM_SPACING_DP = 12;
 
     private static final int ID_CHAT_ROOM = 0;
     private static final int ID_SCAN_LOGIN = 1;
@@ -71,6 +73,7 @@ public class ActivityWebSocketDashboard extends AppCompatActivity {
 
         RecyclerView recyclerView = findViewById(R.id.recycler_view_dashboard);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerView.addItemDecoration(new DashboardSpacingItemDecoration(dpToPx(DASHBOARD_ITEM_SPACING_DP)));
         adapter = new ServiceAdapter(items, this::openServiceStats);
         recyclerView.setAdapter(adapter);
 
@@ -168,6 +171,10 @@ public class ActivityWebSocketDashboard extends AppCompatActivity {
         }
     }
 
+    private int dpToPx(int dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
+    }
+
     private static final class ServiceItem {
         final int id;
         @NonNull
@@ -228,5 +235,26 @@ public class ActivityWebSocketDashboard extends AppCompatActivity {
 
     private interface OnItemClickListener {
         void onItemClick(int position);
+    }
+
+    private static final class DashboardSpacingItemDecoration extends RecyclerView.ItemDecoration {
+        private final int verticalSpacingPx;
+
+        DashboardSpacingItemDecoration(int verticalSpacingPx) {
+            this.verticalSpacingPx = verticalSpacingPx;
+        }
+
+        @Override
+        public void getItemOffsets(
+                @NonNull Rect outRect,
+                @NonNull View view,
+                @NonNull RecyclerView parent,
+                @NonNull RecyclerView.State state
+        ) {
+            int position = parent.getChildAdapterPosition(view);
+            if (position > 0) {
+                outRect.top = verticalSpacingPx;
+            }
+        }
     }
 }

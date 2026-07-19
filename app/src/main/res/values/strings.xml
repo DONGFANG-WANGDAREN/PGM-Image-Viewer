@@ -30,7 +30,6 @@
     <string name="dialog_apk_install_message">This is an APK file. Do you want to open the system installer?</string>
     <string name="dialog_yes">Yes</string>
     <string name="dialog_no">No</string>
-    <string name="convert_pmg">Convert to PMG</string>
     <string name="search_hint">Search text</string>
     <string name="search_no_result">0 / 0</string>
     <string name="search_previous">Previous</string>
@@ -40,8 +39,6 @@
     <string name="loading_message">Large files are opened in the background to keep the UI responsive.</string>
     <string name="toast_storage_permission_required">Allow All Files Access to use this app.</string>
     <string name="toast_storage_permission_denied">All Files Access is required. The app will close.</string>
-    <string name="toast_convert_pmg_success">PMG saved: %1$s</string>
-    <string name="toast_convert_pmg_failed">Failed to save the PMG file.</string>
     <string name="text_scroll_position_initial">0%%</string>
     <string name="text_scroll_position">%1$d%%</string>
     <string name="text_preview_truncated_notice">[Preview truncated to keep the viewer responsive.]</string>

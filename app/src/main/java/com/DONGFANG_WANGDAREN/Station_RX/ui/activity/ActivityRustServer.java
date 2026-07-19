@@ -309,7 +309,10 @@ public class ActivityRustServer extends AppCompatActivity {
         builder.append("HTTP base:\nhttp://").append(ip).append(":").append(port).append("\n\n");
         builder.append("GET /\n  Chat room (index.html)\n\n");
         builder.append("GET /files\n  File manager\n\n");
+        builder.append("GET /login?token=...\n  Token login\n\n");
+        builder.append("GET /web-login\n  QR web login page\n\n");
         builder.append("GET /api/config\n  WebSocket / HTTP addresses\n\n");
+        builder.append("GET /api/web-login-session /api/session-status /api/confirm /api/qr.png\n  QR login flow\n\n");
         builder.append("GET /api/device\n  Device & network info\n\n");
         builder.append("GET /ws?name=...\n  WebSocket chat\n\n");
         builder.append("GET /api/files?path=...\n  List files\n\n");

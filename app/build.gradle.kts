@@ -79,11 +79,43 @@ fun findNdkDirectory(localPropertiesPath: String): String? {
     return null
 }
 
-fun findCargoExecutable(): File? {
-    return System.getenv("PATH")
+fun readLocalProperty(localPropertiesPath: String, key: String): String? {
+    val localProperties = File(localPropertiesPath)
+    if (!localProperties.exists()) {
+        return null
+    }
+    return localProperties.readText().lines()
+        .firstOrNull { it.startsWith("$key=") }
+        ?.substringAfter("$key=")
+        ?.trim()
+        ?.replace("\\ ", " ")
+        ?.replace("\\\\", "/")
+}
+
+fun findCargoExecutable(localPropertiesPath: String): File? {
+    val userHome = System.getProperty("user.home")
+    val candidatePaths = linkedSetOf<String>()
+
+    // 1. Explicit overrides
+    readLocalProperty(localPropertiesPath, "cargo.path")?.let(candidatePaths::add)
+    System.getenv("CARGO")?.let(candidatePaths::add)
+    System.getenv("CARGO_HOME")?.let { candidatePaths.add(File(it, "bin/cargo").absolutePath) }
+
+    // 2. Common install locations when IDE Gradle does not inherit shell PATH
+    candidatePaths.add(File(userHome, ".cargo/bin/cargo").absolutePath)
+    candidatePaths.add("/opt/homebrew/bin/cargo")
+    candidatePaths.add("/usr/local/bin/cargo")
+
+    // 3. Fall back to current PATH
+    System.getenv("PATH")
         ?.split(File.pathSeparator)
-        ?.map { File(it, "cargo") }
-        ?.firstOrNull { it.exists() }
+        ?.map { File(it, "cargo").absolutePath }
+        ?.forEach(candidatePaths::add)
+
+    return candidatePaths
+        .asSequence()
+        .map(::File)
+        .firstOrNull { it.isFile && it.canExecute() }
 }
 
 tasks.register<Exec>("cargoBuild") {
@@ -100,8 +132,11 @@ tasks.register<Exec>("cargoBuild") {
                 "Android NDK not found. " +
                 "Set ndk.dir in local.properties, or set ANDROID_NDK_HOME environment variable."
             )
-        val cargo = findCargoExecutable()
-            ?: error("cargo not found in PATH. Install Rust and cargo.")
+        val cargo = findCargoExecutable(localPropertiesPath)
+            ?: error(
+                "cargo not found. Install Rust/cargo, or set cargo.path in local.properties, " +
+                "or make cargo available via CARGO/CARGO_HOME/PATH."
+            )
 
         environment("ANDROID_NDK_HOME", ndk)
         commandLine(

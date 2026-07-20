@@ -65,38 +65,62 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_text_zoom_out"
-                style="@style/Widget.Material3.Button.TextButton"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:minWidth="0dp"
+                android:minHeight="48dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
                 android:text="@string/text_zoom_out"
+                android:textSize="14sp"
                 android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_text_zoom_in"
-                style="@style/Widget.Material3.Button.TextButton"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:minWidth="0dp"
+                android:minHeight="48dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
                 android:text="@string/text_zoom_in"
+                android:textSize="14sp"
                 android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_pretty_print"
-                style="@style/Widget.Material3.Button.TextButton"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:minWidth="0dp"
+                android:minHeight="48dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
                 android:text="@string/text_pretty_print"
+                android:textSize="14sp"
                 android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_toggle_markdown_preview"
-                style="@style/Widget.Material3.Button.TextButton"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:minWidth="0dp"
+                android:minHeight="48dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
                 android:text="@string/markdown_preview"
+                android:textSize="14sp"
                 android:visibility="gone" />
         </LinearLayout>
 

@@ -54,6 +54,17 @@
             android:textColor="@color/slate_700"
             android:textSize="13sp" />
 
+        <TextView
+            android:id="@+id/text_view_text_large_warning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/text_large_warning"
+            android:textColor="@color/red_500"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
         <LinearLayout
             android:id="@+id/layout_text_actions"
             android:layout_width="match_parent"

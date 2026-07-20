@@ -42,6 +42,7 @@
     <string name="text_scroll_position_initial">0%%</string>
     <string name="text_scroll_position">%1$d%%</string>
     <string name="text_preview_truncated_notice">[预览内容过大，已截断显示以保持流畅。]</string>
+    <string name="text_large_warning">警告：当前文本过大，无法完整展示全部内容。</string>
     <string name="markdown_preview">预览</string>
     <string name="markdown_source">源码</string>
     <string name="text_pretty_print">美化显示</string>

@@ -42,6 +42,7 @@
     <string name="text_scroll_position_initial">0%%</string>
     <string name="text_scroll_position">%1$d%%</string>
     <string name="text_preview_truncated_notice">[Preview truncated to keep the viewer responsive.]</string>
+    <string name="text_large_warning">Warning: This text is too large to display in full.</string>
     <string name="markdown_preview">Preview</string>
     <string name="markdown_source">Source</string>
     <string name="text_pretty_print">Pretty Print</string>

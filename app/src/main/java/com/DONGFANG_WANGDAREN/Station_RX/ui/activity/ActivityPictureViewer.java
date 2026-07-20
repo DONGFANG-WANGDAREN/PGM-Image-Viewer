@@ -136,6 +136,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private TextView textViewEmptyMessage;
     private TextView textViewCurrentFileTitle;
     private TextView textViewCurrentFilePath;
+    private TextView textViewTextLargeWarning;
     private View layoutHistoryPanel;
     private LinearLayout layoutHistoryList;
     private TextView textViewHistoryEmpty;
@@ -230,6 +231,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         textViewEmptyMessage = findViewById(R.id.text_view_empty_message);
         textViewCurrentFileTitle = findViewById(R.id.text_view_current_file_title);
         textViewCurrentFilePath = findViewById(R.id.text_view_current_file_path);
+        textViewTextLargeWarning = findViewById(R.id.text_view_text_large_warning);
         layoutHistoryPanel = findViewById(R.id.layout_history_panel);
         layoutHistoryList = findViewById(R.id.layout_history_list);
         textViewHistoryEmpty = findViewById(R.id.text_view_history_empty);
@@ -681,6 +683,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
 
     private void showBitmap(@NonNull Bitmap bitmap) {
         stopMediaPlayback();
+        updateTextLargeWarningVisible(false);
         setTextSearchVisible(false);
         setTextActionsVisible(false);
         textViewFileContent.setText(null);
@@ -695,6 +698,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
     }
 
     private void showMediaFile(@NonNull Uri uri) {
+        updateTextLargeWarningVisible(false);
         setTextSearchVisible(false);
         setTextActionsVisible(false);
         viewPictureZoom.setImageDrawable(null);
@@ -757,6 +761,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         currentTextContent = currentOriginalTextContent;
         currentFileIsMarkdown = isMarkdownFileName(currentFileName);
         currentTextLargeMode = isLargeTextContent(currentTextContent);
+        updateTextLargeWarningVisible(currentTextLargeMode);
         currentTextSupportsPrettyPrint = isStructuredTextFileName(currentFileName);
         currentTextPrettyPrinted = false;
         markdownPreviewMode = false;
@@ -924,6 +929,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         }
         if (isNullOrEmpty(filePath)) {
             textViewCurrentFilePath.setText(R.string.current_file_default_path);
+            updateTextLargeWarningVisible(false);
             return;
         }
         String sizeText = formatFileSize(fileSize);
@@ -932,6 +938,10 @@ public class ActivityPictureViewer extends AppCompatActivity {
         } else {
             textViewCurrentFilePath.setText(filePath + " · " + sizeText);
         }
+    }
+
+    private void updateTextLargeWarningVisible(boolean visible) {
+        textViewTextLargeWarning.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     private long getFileSize(@NonNull Uri uri) {
@@ -1104,6 +1114,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
             currentOriginalTextContent = "";
             currentFileIsMarkdown = false;
             currentTextLargeMode = false;
+            updateTextLargeWarningVisible(false);
             currentTextSupportsPrettyPrint = false;
             currentTextPrettyPrinted = false;
             markdownPreviewMode = false;
@@ -1318,6 +1329,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         setOpenUiEnabled(false);
         updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
         stopMediaPlayback();
+        updateTextLargeWarningVisible(false);
         setTextSearchVisible(false);
         setTextActionsVisible(false);
         viewPictureZoom.setImageDrawable(null);

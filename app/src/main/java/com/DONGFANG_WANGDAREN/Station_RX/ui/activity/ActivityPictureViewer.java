@@ -10,7 +10,6 @@ import com.DONGFANG_WANGDAREN.Station_RX.reader.ReaderTableExcel;
 import com.DONGFANG_WANGDAREN.Station_RX.reader.ReaderTextPlain;
 import com.DONGFANG_WANGDAREN.Station_RX.storage.AppStoragePaths;
 import com.DONGFANG_WANGDAREN.Station_RX.ui.view.ViewPictureZoom;
-import com.DONGFANG_WANGDAREN.Station_RX.ui.view.ViewSeekBarVertical;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -35,12 +34,12 @@ import android.text.style.BackgroundColorSpan;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.SeekBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -110,8 +109,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private static final String JSON_KEY_FILE_NAME = "file_name";
     private static final String JSON_KEY_FILE_PATH = "file_path";
     private static final String JSON_KEY_FILE_SIZE = "file_size";
-    private static final int TEXT_QUICK_SCROLL_MAX = 1000;
-
     private ActivityResultLauncher<String[]> launcherOpenDocument;
     private ActivityResultLauncher<Intent> launcherManageAllFilesAccess;
     private MaterialButton buttonOpenPgm;
@@ -129,9 +126,9 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private MaterialButton buttonTextZoomOut;
     private ScrollView scrollViewText;
     private View layoutTextQuickScroll;
-    private ViewSeekBarVertical seekBarTextQuickScroll;
+    private View viewTextQuickScrollTrack;
+    private View viewTextQuickScrollThumb;
     private TextView textViewFileContent;
-    private TextView textViewTextScrollPosition;
     private WebView webViewMarkdownPreview;
     private PlayerView playerViewFile;
     private LinearLayout layoutEmptyState;
@@ -166,7 +163,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private boolean currentTextSupportsPrettyPrint;
     private boolean currentTextPrettyPrinted;
     private boolean markdownPreviewMode;
-    private boolean updatingTextQuickScrollFromCode;
     private boolean startupIntentHandled;
     private float currentTextSizeSp = AppConfig.get().getDefaultTextSizeSp();
 
@@ -224,9 +220,9 @@ public class ActivityPictureViewer extends AppCompatActivity {
         buttonTextZoomOut = findViewById(R.id.button_text_zoom_out);
         scrollViewText = findViewById(R.id.scroll_view_text);
         layoutTextQuickScroll = findViewById(R.id.layout_text_quick_scroll);
-        seekBarTextQuickScroll = findViewById(R.id.seek_bar_text_quick_scroll);
+        viewTextQuickScrollTrack = findViewById(R.id.view_text_quick_scroll_track);
+        viewTextQuickScrollThumb = findViewById(R.id.view_text_quick_scroll_thumb);
         textViewFileContent = findViewById(R.id.text_view_file_content);
-        textViewTextScrollPosition = findViewById(R.id.text_view_text_scroll_position);
         webViewMarkdownPreview = findViewById(R.id.web_view_markdown_preview);
         playerViewFile = findViewById(R.id.player_view_file);
         layoutEmptyState = findViewById(R.id.layout_empty_state);
@@ -270,23 +266,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
         buttonTextZoomIn.setOnClickListener(view -> adjustTextSize(2f));
         buttonTextZoomOut.setOnClickListener(view -> adjustTextSize(-2f));
         scrollViewText.setOnScrollChangeListener((view, scrollX, scrollY, oldScrollX, oldScrollY) -> updateTextQuickScrollState());
-        seekBarTextQuickScroll.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (!fromUser || updatingTextQuickScrollFromCode) {
-                    return;
-                }
-                scrollTextToQuickScrollProgress(progress);
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-                updateTextQuickScrollState();
-            }
+        layoutTextQuickScroll.setOnTouchListener((view, event) -> handleTextQuickScrollTouch(event));
+        layoutTextQuickScroll.setOnClickListener(view -> {
         });
         editTextSearch.addTextChangedListener(new TextWatcher() {
             @Override
@@ -1011,26 +992,46 @@ public class ActivityPictureViewer extends AppCompatActivity {
             return;
         }
         setTextQuickScrollVisible(true);
-        int progress = Math.round((scrollViewText.getScrollY() * 1f / scrollRange) * TEXT_QUICK_SCROLL_MAX);
-        int percent = Math.round((scrollViewText.getScrollY() * 100f) / scrollRange);
-        updatingTextQuickScrollFromCode = true;
-        seekBarTextQuickScroll.setMax(TEXT_QUICK_SCROLL_MAX);
-        seekBarTextQuickScroll.setProgress(progress);
-        updatingTextQuickScrollFromCode = false;
-        textViewTextScrollPosition.setText(getString(R.string.text_scroll_position, percent));
-        updateTextQuickScrollIndicatorPosition(progress);
+        float scrollRatio = scrollViewText.getScrollY() * 1f / scrollRange;
+        updateTextQuickScrollIndicatorPosition(scrollRatio);
     }
 
-    private void scrollTextToQuickScrollProgress(int progress) {
+    private boolean handleTextQuickScrollTouch(@NonNull MotionEvent event) {
+        if (scrollViewText.getVisibility() != View.VISIBLE || webViewMarkdownPreview.getVisibility() == View.VISIBLE) {
+            return false;
+        }
+        int action = event.getActionMasked();
+        if (action != MotionEvent.ACTION_DOWN
+                && action != MotionEvent.ACTION_MOVE
+                && action != MotionEvent.ACTION_UP) {
+            return false;
+        }
+        scrollTextToQuickScrollTouch(event.getY());
+        if (action == MotionEvent.ACTION_UP) {
+            layoutTextQuickScroll.performClick();
+        }
+        return true;
+    }
+
+    private void scrollTextToQuickScrollTouch(float touchY) {
+        int trackTop = viewTextQuickScrollTrack.getTop();
+        int trackHeight = viewTextQuickScrollTrack.getHeight();
+        if (trackHeight <= 0) {
+            return;
+        }
+        float scrollRatio = (touchY - trackTop) / trackHeight;
+        scrollTextToQuickScrollRatio(scrollRatio);
+    }
+
+    private void scrollTextToQuickScrollRatio(float scrollRatio) {
         int scrollRange = getTextScrollRange();
         if (scrollRange <= 0) {
             return;
         }
-        int targetY = Math.round((progress * 1f / TEXT_QUICK_SCROLL_MAX) * scrollRange);
+        float clampedRatio = Math.max(0f, Math.min(1f, scrollRatio));
+        int targetY = Math.round(clampedRatio * scrollRange);
         scrollViewText.scrollTo(0, targetY);
-        int percent = Math.round((targetY * 100f) / scrollRange);
-        textViewTextScrollPosition.setText(getString(R.string.text_scroll_position, percent));
-        updateTextQuickScrollIndicatorPosition(progress);
+        updateTextQuickScrollIndicatorPosition(clampedRatio);
     }
 
     private int getTextScrollRange() {
@@ -1043,28 +1044,22 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private void setTextQuickScrollVisible(boolean visible) {
         layoutTextQuickScroll.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (!visible) {
-            updatingTextQuickScrollFromCode = true;
-            seekBarTextQuickScroll.setProgress(0);
-            updatingTextQuickScrollFromCode = false;
-            textViewTextScrollPosition.setText(R.string.text_scroll_position_initial);
-            textViewTextScrollPosition.setTranslationY(0f);
+            viewTextQuickScrollThumb.setTranslationY(0f);
         }
     }
 
-    private void updateTextQuickScrollIndicatorPosition(int progress) {
+    private void updateTextQuickScrollIndicatorPosition(float scrollRatio) {
         layoutTextQuickScroll.post(() -> {
-            int containerHeight = layoutTextQuickScroll.getHeight();
-            int seekBarTop = seekBarTextQuickScroll.getTop();
-            int seekBarHeight = seekBarTextQuickScroll.getHeight();
-            int indicatorHeight = textViewTextScrollPosition.getHeight();
-            if (containerHeight <= 0 || seekBarHeight <= 0 || indicatorHeight <= 0) {
+            int trackTop = viewTextQuickScrollTrack.getTop();
+            int trackHeight = viewTextQuickScrollTrack.getHeight();
+            int thumbHeight = viewTextQuickScrollThumb.getHeight();
+            if (trackHeight <= 0 || thumbHeight <= 0) {
                 return;
             }
-            float progressRatio = TEXT_QUICK_SCROLL_MAX == 0 ? 0f : (progress * 1f / TEXT_QUICK_SCROLL_MAX);
-            float thumbCenterY = seekBarTop + ((1f - progressRatio) * seekBarHeight);
-            float targetY = thumbCenterY - (indicatorHeight / 2f);
-            float clampedY = Math.max(0f, Math.min(targetY, containerHeight - indicatorHeight));
-            textViewTextScrollPosition.setTranslationY(clampedY);
+            float clampedRatio = Math.max(0f, Math.min(1f, scrollRatio));
+            float travel = Math.max(0f, trackHeight - thumbHeight);
+            float targetY = trackTop + (clampedRatio * travel);
+            viewTextQuickScrollThumb.setTranslationY(targetY);
         });
     }
 

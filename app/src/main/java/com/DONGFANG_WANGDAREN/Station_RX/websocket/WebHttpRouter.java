@@ -160,11 +160,14 @@ public final class WebHttpRouter {
     private NanoHTTPD.Response handleConfig() {
         String wsAddress = service.getServerAddress();
         if (wsAddress == null) {
-            wsAddress = "ws://" + service.getLocalIpAddress() + ":" + AppConfig.get().getWebSocketPort();
+            wsAddress = "ws://" + LanServerHelper.getDisplayHost() + ":" + service.getWebSocketPort();
         }
         JSONObject result = new JSONObject();
         try {
             result.put("wsAddress", wsAddress);
+            result.put("httpAddress", service.getHttpAddress());
+            result.put("httpsAddress", service.getHttpsAddress());
+            result.put("browserAddress", service.getBrowserAddress());
         } catch (JSONException exception) {
             AppLogger.e(TAG, "Failed to build config JSON.", exception);
         }
@@ -175,16 +178,12 @@ public final class WebHttpRouter {
     private NanoHTTPD.Response handleWebLoginSession() {
         cleanupExpiredWebLoginSessions();
         WebLoginSession webSession = createWebLoginSession();
-        String localIp = service.getLocalIpAddress();
-        if (localIp == null || localIp.isEmpty()) {
-            localIp = "127.0.0.1";
-        }
-        String loginUrl = "http://" + localIp + ":" + AppConfig.get().getHttpPort() + "/web-login";
+        String loginUrl = service.getLoginUrl();
         JSONObject result = new JSONObject();
         try {
             result.put("sessionId", webSession.sessionId);
             result.put("token", webSession.token);
-            result.put("loginUrl", loginUrl);
+            result.put("loginUrl", loginUrl != null ? loginUrl : "");
         } catch (JSONException exception) {
             AppLogger.e(TAG, "Failed to build web login session JSON.", exception);
         }
@@ -984,8 +983,9 @@ public final class WebHttpRouter {
             JSONObject network = new JSONObject();
             String ip = service.getLocalIpAddress();
             network.put("localIp", ip != null ? ip : "");
-            network.put("webSocketPort", AppConfig.get().getWebSocketPort());
-            network.put("httpPort", AppConfig.get().getHttpPort());
+            network.put("webSocketPort", service.getWebSocketPort());
+            network.put("httpPort", service.getHttpPort());
+            network.put("httpsPort", service.getHttpsPort());
             network.put("wifiConnected", NetworkInfoHelper.isWifiConnected(context));
             network.put("wifiLinkSpeedMbps", NetworkInfoHelper.getWifiLinkSpeedMbps(context));
             network.put("wifiSignalDbm", NetworkInfoHelper.getWifiSignalDbm(context));

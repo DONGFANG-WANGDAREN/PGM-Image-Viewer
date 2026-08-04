@@ -2,7 +2,6 @@ package com.DONGFANG_WANGDAREN.Station_RX.ui.activity;
 
 
 import com.DONGFANG_WANGDAREN.Station_RX.R;
-import com.DONGFANG_WANGDAREN.Station_RX.app.AppConfig;
 import com.DONGFANG_WANGDAREN.Station_RX.app.AppLogger;
 import com.DONGFANG_WANGDAREN.Station_RX.rust.RustServerBridge;
 import com.DONGFANG_WANGDAREN.Station_RX.websocket.WebSocketService;
@@ -132,21 +131,20 @@ public class ActivityWebSocketDashboard extends AppCompatActivity {
 
         boolean scanLoginRunning = chatRunning;
         String scanLoginStatus = scanLoginRunning ? getString(R.string.dashboard_status_running_simple) : getString(R.string.dashboard_status_stopped);
-        String httpAddress = webSocketService != null ? webSocketService.getHttpAddress() : null;
-        if (scanLoginRunning && httpAddress != null && !httpAddress.isEmpty()) {
-            scanLoginStatus = getString(R.string.dashboard_status_running_with_address, httpAddress + "/web-login");
+        String loginUrl = webSocketService != null ? webSocketService.getLoginUrl() : null;
+        String secureLoginUrl = webSocketService != null ? webSocketService.getSecureLoginUrl() : null;
+        if (scanLoginRunning && loginUrl != null && !loginUrl.isEmpty()) {
+            scanLoginStatus = getString(
+                    R.string.dashboard_status_running_with_address,
+                    com.DONGFANG_WANGDAREN.Station_RX.websocket.LanServerHelper.buildAddressBlock(loginUrl, secureLoginUrl));
         }
         items.add(new ServiceItem(ID_SCAN_LOGIN, getString(R.string.dashboard_scan_login), scanLoginStatus, scanLoginRunning));
 
         boolean rustRunning = RustServerBridge.isRunning();
         String rustStatus = rustRunning ? getString(R.string.dashboard_status_running_simple) : getString(R.string.dashboard_status_stopped);
         if (rustRunning) {
-            String ip = WebSocketService.getLocalIpAddress();
-            if (ip == null || ip.isEmpty()) {
-                ip = "127.0.0.1";
-            }
-            String rustAddress = "http://" + ip + ":" + (AppConfig.get().getHttpPort() + 1000);
-            rustStatus = getString(R.string.dashboard_status_running_with_address, rustAddress);
+            String rustAddress = RustServerBridge.getCurrentAddress();
+            rustStatus = getString(R.string.dashboard_status_running_with_address, rustAddress != null ? rustAddress : "-");
         }
         items.add(new ServiceItem(ID_RUST_SERVER, getString(R.string.dashboard_rust_server), rustStatus, rustRunning));
 

@@ -8,6 +8,9 @@ import androidx.annotation.Nullable;
 public final class RustServerBridge {
 
     private static final String TAG = "RustServerBridge";
+    private static volatile int currentPort = -1;
+    @NonNull
+    private static volatile String currentDisplayHost = "127.0.0.1";
 
     static {
         try {
@@ -23,15 +26,36 @@ public final class RustServerBridge {
 
     @NonNull
     public static String startServer(@NonNull String bindHost, @NonNull String displayHost, int port, @NonNull String webRoot, @NonNull String uploadRoot, @NonNull String chatImagesRoot, @NonNull String deviceInfoJson) {
-        return nativeStartServer(bindHost, displayHost, port, webRoot, uploadRoot, chatImagesRoot, deviceInfoJson);
+        String result = nativeStartServer(bindHost, displayHost, port, webRoot, uploadRoot, chatImagesRoot, deviceInfoJson);
+        if ("started".equalsIgnoreCase(result)) {
+            currentDisplayHost = displayHost;
+            currentPort = port;
+        }
+        return result;
     }
 
     public static boolean stopServer() {
-        return nativeStopServer();
+        boolean stopped = nativeStopServer();
+        if (stopped) {
+            currentPort = -1;
+        }
+        return stopped;
     }
 
     public static boolean isRunning() {
         return nativeIsRunning();
+    }
+
+    @Nullable
+    public static String getCurrentAddress() {
+        if (!isRunning() || currentPort <= 0) {
+            return null;
+        }
+        return "http://" + currentDisplayHost + ":" + currentPort;
+    }
+
+    public static int getCurrentPort() {
+        return currentPort;
     }
 
     @NonNull

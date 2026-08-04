@@ -5,6 +5,7 @@ import com.DONGFANG_WANGDAREN.Station_RX.app.AppConfig;
 import com.DONGFANG_WANGDAREN.Station_RX.app.AppLogger;
 import com.DONGFANG_WANGDAREN.Station_RX.rust.RustServerBridge;
 import com.DONGFANG_WANGDAREN.Station_RX.storage.AppStoragePaths;
+import com.DONGFANG_WANGDAREN.Station_RX.websocket.LanServerHelper;
 import com.DONGFANG_WANGDAREN.Station_RX.websocket.NetworkInfoHelper;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
@@ -36,11 +37,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.Inet4Address;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
 import java.text.SimpleDateFormat;
-import java.util.Collections;
 import java.util.Date;
 import java.util.Locale;
 
@@ -89,17 +86,15 @@ public class ActivityRustServer extends AppCompatActivity {
             AppLogger.i(TAG, "Rust server stop result: " + stopped);
             Toast.makeText(this, R.string.rust_server_stopped, Toast.LENGTH_SHORT).show();
         } else {
-            String ip = getLocalIpAddress();
-            if (ip == null || ip.isEmpty()) {
-                ip = "0.0.0.0";
-            }
-            int port = AppConfig.get().getHttpPort() + RUST_PORT_OFFSET;
+            String ip = LanServerHelper.getDisplayHost();
+            int preferredPort = AppConfig.get().getHttpPort() + RUST_PORT_OFFSET;
+            int port = LanServerHelper.findAvailablePort(preferredPort);
             String bindHost = "0.0.0.0";
             String displayHost = ip;
             String webRoot = prepareWebRoot();
             String uploadRoot = ensureUploadRoot();
             String chatImagesRoot = ensureChatImagesRoot();
-            String deviceInfoJson = buildDeviceInfoJson();
+            String deviceInfoJson = buildDeviceInfoJson(port);
             String result = RustServerBridge.startServer(bindHost, displayHost, port, webRoot, uploadRoot, chatImagesRoot, deviceInfoJson);
             AppLogger.i(TAG, "Rust server start result: " + result + " on port " + port);
             Toast.makeText(this, R.string.rust_server_started, Toast.LENGTH_SHORT).show();
@@ -170,7 +165,7 @@ public class ActivityRustServer extends AppCompatActivity {
     }
 
     @NonNull
-    private String buildDeviceInfoJson() {
+    private String buildDeviceInfoJson(int httpPort) {
         JSONObject info = new JSONObject();
         try {
             info.put("appName", AppStoragePaths.resolveBaseDirectory(this).getName());
@@ -231,10 +226,10 @@ public class ActivityRustServer extends AppCompatActivity {
             info.put("cpu", cpu);
 
             JSONObject network = new JSONObject();
-            String ip = getLocalIpAddress();
+            String ip = LanServerHelper.getDisplayHost();
             network.put("localIp", ip != null ? ip : "");
             network.put("webSocketPort", AppConfig.get().getWebSocketPort());
-            network.put("httpPort", AppConfig.get().getHttpPort());
+            network.put("httpPort", httpPort);
             network.put("wifiConnected", NetworkInfoHelper.isWifiConnected(this));
             network.put("wifiLinkSpeedMbps", NetworkInfoHelper.getWifiLinkSpeedMbps(this));
             network.put("wifiSignalDbm", NetworkInfoHelper.getWifiSignalDbm(this));
@@ -280,9 +275,8 @@ public class ActivityRustServer extends AppCompatActivity {
             toggleButton.setText(R.string.rust_server_stop);
             toggleButton.setBackgroundTintList(ContextCompat.getColorStateList(this, R.color.red_500));
 
-            String ip = getLocalIpAddress();
-            int port = AppConfig.get().getHttpPort() + RUST_PORT_OFFSET;
-            addressText.setText("http://" + ip + ":" + port);
+            String address = RustServerBridge.getCurrentAddress();
+            addressText.setText(address != null ? address : "-");
         } else {
             statusText.setText(R.string.rust_server_status_stopped);
             statusText.setTextColor(ContextCompat.getColor(this, R.color.slate_900));
@@ -293,20 +287,23 @@ public class ActivityRustServer extends AppCompatActivity {
     }
 
     private void openBrowser() {
-        String ip = getLocalIpAddress();
-        int port = AppConfig.get().getHttpPort() + RUST_PORT_OFFSET;
-        String url = "http://" + ip + ":" + port;
+        String url = RustServerBridge.getCurrentAddress();
+        if (url == null || url.isEmpty()) {
+            return;
+        }
         Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
         startActivity(intent);
     }
 
     private void logEndpoints() {
-        int port = AppConfig.get().getHttpPort() + RUST_PORT_OFFSET;
-        String ip = getLocalIpAddress();
+        String baseAddress = RustServerBridge.getCurrentAddress();
+        if (baseAddress == null || baseAddress.isEmpty()) {
+            baseAddress = "http://" + LanServerHelper.getDisplayHost() + ":" + (AppConfig.get().getHttpPort() + RUST_PORT_OFFSET);
+        }
         StringBuilder builder = new StringBuilder();
         builder.append("Rust Axum server endpoints\n");
         builder.append("==========================\n\n");
-        builder.append("HTTP base:\nhttp://").append(ip).append(":").append(port).append("\n\n");
+        builder.append("HTTP base:\n").append(baseAddress).append("\n\n");
         builder.append("GET /\n  Chat room (index.html)\n\n");
         builder.append("GET /files\n  File manager\n\n");
         builder.append("GET /login?token=...\n  Token login\n\n");
@@ -321,21 +318,5 @@ public class ActivityRustServer extends AppCompatActivity {
         builder.append("POST /api/chat/upload-image\n  Send chat image\n\n");
         builder.append("Note: this runs in parallel with the existing Java server.");
         logText.setText(builder.toString());
-    }
-
-    @Nullable
-    private String getLocalIpAddress() {
-        try {
-            for (NetworkInterface networkInterface : Collections.list(NetworkInterface.getNetworkInterfaces())) {
-                for (InetAddress address : Collections.list(networkInterface.getInetAddresses())) {
-                    if (!address.isLoopbackAddress() && address instanceof Inet4Address) {
-                        return address.getHostAddress();
-                    }
-                }
-            }
-        } catch (Exception exception) {
-            AppLogger.e(TAG, "Failed to get local IP address.", exception);
-        }
-        return "127.0.0.1";
     }
 }

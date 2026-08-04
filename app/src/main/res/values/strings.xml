@@ -114,7 +114,7 @@
     <string name="tools_scan_login_success">Web login confirmed</string>
     <string name="tools_scan_login_failed">Failed to confirm web login. Please make sure the WebSocket service is running.</string>
     <string name="tools_scan_login_invalid">Unrecognized QR code.</string>
-    <string name="tools_scan_login_url_hint">Open this URL on the other device. The page will show a QR code.</string>
+    <string name="tools_scan_login_url_hint">Open this URL on the other device. The page will show a QR code. HTTPS may show a one-time certificate warning on the first visit.</string>
     <string name="tools_scan_login_copy">Copy URL</string>
     <string name="tools_scan_login_start">Start Scan</string>
     <string name="tools_scan_login_url_copied">URL copied.</string>

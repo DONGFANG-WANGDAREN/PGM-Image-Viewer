@@ -104,7 +104,7 @@
     <string name="tools_scan_login_success">网页端登录成功</string>
     <string name="tools_scan_login_failed">网页端登录失败，请确认 WebSocket 服务已启动。</string>
     <string name="tools_scan_login_invalid">无法识别该二维码。</string>
-    <string name="tools_scan_login_url_hint">在另一台设备上打开以下网址，页面会显示二维码。</string>
+    <string name="tools_scan_login_url_hint">在另一台设备上打开以下网址，页面会显示二维码。首次访问 HTTPS 时，浏览器可能会提示证书风险。</string>
     <string name="tools_scan_login_copy">复制网址</string>
     <string name="tools_scan_login_start">开始扫码</string>
     <string name="tools_scan_login_url_copied">网址已复制</string>

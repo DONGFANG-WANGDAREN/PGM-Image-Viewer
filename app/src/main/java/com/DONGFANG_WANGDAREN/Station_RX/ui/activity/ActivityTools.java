@@ -2,9 +2,9 @@ package com.DONGFANG_WANGDAREN.Station_RX.ui.activity;
 
 
 import com.DONGFANG_WANGDAREN.Station_RX.R;
-import com.DONGFANG_WANGDAREN.Station_RX.app.AppConfig;
 import com.DONGFANG_WANGDAREN.Station_RX.app.AppLogger;
 import com.DONGFANG_WANGDAREN.Station_RX.ui.adapter.ToolsAdapter;
+import com.DONGFANG_WANGDAREN.Station_RX.websocket.LanServerHelper;
 import com.DONGFANG_WANGDAREN.Station_RX.websocket.WebSocketService;
 import android.Manifest;
 import android.content.ClipData;
@@ -101,12 +101,9 @@ public class ActivityTools extends AppCompatActivity {
     private void openScanLogin() {
         AppLogger.i(TAG, "Open scan login.");
         ContextCompat.startForegroundService(this, new Intent(this, WebSocketService.class));
-        String localIp = WebSocketService.getLocalIpAddress();
-        if (localIp == null || localIp.isEmpty()) {
-            localIp = "127.0.0.1";
-        }
-        String loginUrl = "http://" + localIp + ":" + AppConfig.get().getHttpPort() + "/web-login";
-        showScanLoginDialog(loginUrl);
+        String loginUrl = WebSocketService.getPreferredLoginUrl();
+        String secureLoginUrl = WebSocketService.getPreferredSecureLoginUrl();
+        showScanLoginDialog(LanServerHelper.buildAddressBlock(loginUrl, secureLoginUrl));
     }
 
     private void showScanLoginDialog(@NonNull String loginUrl) {
@@ -185,7 +182,9 @@ public class ActivityTools extends AppCompatActivity {
             if (session == null || token == null) {
                 return null;
             }
-            return "http://127.0.0.1:" + AppConfig.get().getHttpPort() + "/api/confirm?session=" + Uri.encode(session) + "&token=" + Uri.encode(token);
+            return WebSocketService.getLoopbackConfirmBaseAddress()
+                    + "/api/confirm?session=" + Uri.encode(session)
+                    + "&token=" + Uri.encode(token);
         }
         return null;
     }

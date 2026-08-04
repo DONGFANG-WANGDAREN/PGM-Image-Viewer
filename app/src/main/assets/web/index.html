@@ -200,6 +200,10 @@ async function init(){
   try{
     const r=await fetch('/api/config');
     const d=await r.json();
+    const browserAddress=d.browserAddress||d.httpsAddress||d.httpAddress||'';
+    if(browserAddress){
+      statusEl.textContent='Browser: '+browserAddress+' · loading websocket...';
+    }
     connect(d.wsAddress);
   }catch(e){
     statusEl.textContent='Failed to load config: '+e;

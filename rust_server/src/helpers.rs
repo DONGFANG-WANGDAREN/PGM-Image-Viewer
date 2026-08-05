@@ -174,7 +174,9 @@ pub(crate) fn resolve_chat_log_path(base: &str) -> PathBuf {
     let now = Local::now();
     let day_directory = PathBuf::from(base).join(now.format("%Y-%m-%d").to_string());
     let _ = fs::create_dir_all(&day_directory);
-    resolve_unique_name(&day_directory.join(format!("{}.log", now.format("%H-%M-%S"))))
+    resolve_unique_name(
+        &day_directory.join(format!("Chat_{}.txt", now.format("%H-%M-%S_%Y-%m-%d"))),
+    )
 }
 
 pub(crate) fn message_broadcaster() -> Option<broadcast::Sender<String>> {

@@ -13,7 +13,7 @@ use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, services::ServeD
 
 use crate::{
     handlers::{
-        api_chat_upload_image_handler, api_download_handler, api_download_head_handler,
+        api_chat_send_text_handler, api_chat_upload_image_handler, api_download_handler, api_download_head_handler,
         api_files_handler, api_upload_chunk_handler, api_upload_finish_handler, api_upload_handler,
         api_upload_init_handler, api_view_handler, chat_handler, chat_image_handler,
         config_handler, confirm_handler, device_handler, files_handler, login_handler,
@@ -58,6 +58,7 @@ pub(crate) fn build_router(state: AppState) -> Router {
             "/api/chat/upload-image",
             post(api_chat_upload_image_handler),
         )
+        .route("/api/chat/send-text", post(api_chat_send_text_handler))
         .route("/images/:file_name", get(chat_image_handler))
         .route("/ws", get(ws_handler))
         .fallback_service(ServeDir::new(web_root))

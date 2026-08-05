@@ -647,14 +647,27 @@ pub(crate) async fn api_upload_finish_handler(
     }
 }
 
+pub(crate) async fn api_chat_send_text_handler(
+    State(state): State<AppState>,
+    Form(form): Form<HashMap<String, String>>,
+) -> Response {
+    let message = form
+        .get("message")
+        .map(|value| value.trim().to_string())
+        .unwrap_or_default();
+    if message.is_empty() {
+        return Json(json!({"success": false, "error": "Missing message"})).into_response();
+    }
+
+    let payload = build_chat_message("Station RX", &message, "text", None);
+    broadcast_message(&state, payload).await;
+    Json(json!({"success": true})).into_response()
+}
+
 pub(crate) async fn api_chat_upload_image_handler(
     State(state): State<AppState>,
-    headers: HeaderMap,
     mut multipart: Multipart,
 ) -> Response {
-    if !is_authenticated(&headers, &state).await {
-        return serve_login_page(&state).await;
-    }
     let images_root = PathBuf::from(&state.config.chat_images_root);
     let _ = fs::create_dir_all(&images_root);
 

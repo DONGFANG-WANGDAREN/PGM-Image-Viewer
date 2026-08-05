@@ -187,10 +187,9 @@ public class ActivityWebSocket extends AppCompatActivity {
     private void updateUi(boolean running, int clientCount) {
         runOnUiThread(() -> {
             String address = webSocketService != null ? webSocketService.getServerAddress() : null;
-            String httpAddress = webSocketService != null ? webSocketService.getLoginUrl() : null;
-            String httpsAddress = webSocketService != null ? webSocketService.getSecureLoginUrl() : null;
+            String httpAddress = webSocketService != null ? webSocketService.getChatUrl() : null;
             textViewAddress.setText(address != null ? address : "Unknown");
-            textViewHttpAddress.setText(LanServerHelper.buildAddressBlock(httpAddress, httpsAddress));
+            textViewHttpAddress.setText(httpAddress != null ? httpAddress : "Unknown");
             buttonToggle.setText(running ? R.string.websocket_stop : R.string.websocket_start);
             textViewStatus.setText(running ? R.string.websocket_status_running : R.string.websocket_status_stopped);
             updateClientCount(clientCount);
@@ -257,7 +256,7 @@ public class ActivityWebSocket extends AppCompatActivity {
     }
 
     private void openHttpAddressInBrowser() {
-        String httpAddress = webSocketService != null ? webSocketService.getBrowserAddress() : null;
+        String httpAddress = webSocketService != null ? webSocketService.getChatUrl() : null;
         if (httpAddress == null || httpAddress.isEmpty()) {
             return;
         }

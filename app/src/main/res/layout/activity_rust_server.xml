@@ -13,7 +13,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:navigationIcon="@drawable/ic_arrow_back"
-        app:title="@string/rust_server_title" />
+        app:title="@string/tools_rust_server"
+        app:titleTextColor="@color/slate_900" />
 
     <FrameLayout
         android:layout_width="match_parent"
@@ -30,30 +31,30 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/rust_server_status_label"
+                android:text="@string/websocket_server_address"
                 android:textColor="@color/slate_700"
                 android:textSize="14sp" />
 
             <TextView
-                android:id="@+id/text_view_rust_server_status"
+                android:id="@+id/text_view_rust_server_ws_address"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="@string/rust_server_status_stopped"
                 android:textColor="@color/slate_900"
-                android:textSize="18sp"
+                android:textIsSelectable="true"
+                android:textSize="16sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="@string/rust_server_address_label"
+                android:layout_marginTop="12dp"
+                android:text="@string/websocket_browser_address"
                 android:textColor="@color/slate_700"
                 android:textSize="14sp" />
 
             <TextView
-                android:id="@+id/text_view_rust_server_address"
+                android:id="@+id/text_view_rust_server_browser_address"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
@@ -62,54 +63,92 @@
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
+            <TextView
+                android:id="@+id/text_view_rust_server_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/rust_server_status_stopped"
+                android:textColor="@color/slate_700"
+                android:textSize="14sp" />
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_rust_server_toggle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="12dp"
                 android:text="@string/rust_server_start"
                 android:textColor="@color/white"
                 app:backgroundTint="@color/green_600"
                 app:cornerRadius="12dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/button_rust_server_open_browser"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/rust_server_open_browser"
-                android:textColor="@color/blue_500"
-                app:cornerRadius="12dp" />
         </LinearLayout>
     </FrameLayout>
 
-    <TextView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="@string/rust_server_endpoints"
-        android:textColor="@color/slate_700"
-        android:textSize="14sp" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <EditText
+            android:id="@+id/edit_text_rust_server_message"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:backgroundTint="@color/blue_500"
+            android:hint="@string/websocket_message_hint"
+            android:inputType="text"
+            android:maxLines="3"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:textColor="@color/slate_900"
+            android:textColorHint="@color/slate_700" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/button_rust_server_send"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:minWidth="0dp"
+            android:text="@string/websocket_send"
+            android:textColor="@color/white"
+            app:backgroundTint="@color/blue_500"
+            app:cornerRadius="12dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/button_rust_server_image"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:minWidth="0dp"
+            android:text="@string/websocket_image"
+            android:textColor="@color/blue_500"
+            app:cornerRadius="12dp" />
+    </LinearLayout>
 
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="16dp"
         android:layout_weight="1"
-        android:background="@drawable/bg_card_white"
+        android:background="@drawable/bg_rounded_dark"
         android:padding="12dp">
 
         <ScrollView
+            android:id="@+id/scroll_view_rust_server_log"
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:layout_height="match_parent"
+            android:fadeScrollbars="false"
+            android:scrollbars="vertical">
 
             <TextView
                 android:id="@+id/text_view_rust_server_log"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:fontFamily="monospace"
-                android:textColor="@color/slate_900"
+                android:textColor="@color/white"
                 android:textIsSelectable="true"
                 android:textSize="12sp" />
         </ScrollView>

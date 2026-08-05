@@ -4,7 +4,7 @@ package com.DONGFANG_WANGDAREN.Station_RX.ui.activity;
 import com.DONGFANG_WANGDAREN.Station_RX.R;
 import com.DONGFANG_WANGDAREN.Station_RX.app.AppLogger;
 import com.DONGFANG_WANGDAREN.Station_RX.ui.adapter.ToolsAdapter;
-import com.DONGFANG_WANGDAREN.Station_RX.websocket.LanServerHelper;
+import com.DONGFANG_WANGDAREN.Station_RX.websocket.WebHttpRouter;
 import com.DONGFANG_WANGDAREN.Station_RX.websocket.WebSocketService;
 import android.Manifest;
 import android.content.ClipData;
@@ -14,6 +14,8 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.TextView;
@@ -42,6 +44,13 @@ import java.util.List;
 public class ActivityTools extends AppCompatActivity {
 
     private static final String TAG = "ActivityTools";
+    public static final String EXTRA_OPEN_SCAN_LOGIN = "open_scan_login";
+    private static final long WEB_LOGIN_STATUS_POLL_INTERVAL_MS = 1500L;
+
+    @NonNull
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    @Nullable
+    private Runnable pendingWebLoginPoll;
 
     private final ActivityResultLauncher<String> cameraPermissionLauncher = registerForActivityResult(
             new ActivityResultContracts.RequestPermission(),
@@ -81,6 +90,9 @@ public class ActivityTools extends AppCompatActivity {
         recyclerView.setAdapter(new ToolsAdapter(items));
 
         AppLogger.i(TAG, "Tools list opened.");
+        if (getIntent().getBooleanExtra(EXTRA_OPEN_SCAN_LOGIN, false)) {
+            recyclerView.post(this::openScanLogin);
+        }
     }
 
     private void openDashboard() {
@@ -101,17 +113,23 @@ public class ActivityTools extends AppCompatActivity {
     private void openScanLogin() {
         AppLogger.i(TAG, "Open scan login.");
         ContextCompat.startForegroundService(this, new Intent(this, WebSocketService.class));
-        String loginUrl = WebSocketService.getPreferredLoginUrl();
-        String secureLoginUrl = WebSocketService.getPreferredSecureLoginUrl();
-        showScanLoginDialog(LanServerHelper.buildAddressBlock(loginUrl, secureLoginUrl));
+        String loginUrl = WebSocketService.getPreferredWebLoginUrl();
+        showScanLoginDialog(loginUrl);
     }
 
     private void showScanLoginDialog(@NonNull String loginUrl) {
         View view = LayoutInflater.from(this).inflate(R.layout.dialog_scan_login, null);
         TextView urlText = view.findViewById(R.id.text_view_scan_login_url);
+        TextView hintText = view.findViewById(R.id.text_view_scan_login_hint);
         MaterialButton copyButton = view.findViewById(R.id.button_copy_scan_login_url);
+        MaterialButton confirmButton = view.findViewById(R.id.button_confirm_scan_login);
         MaterialButton scanButton = view.findViewById(R.id.button_start_scan);
         urlText.setText(loginUrl);
+        if (hintText != null) {
+            hintText.setText(R.string.tools_scan_login_confirm_waiting);
+        }
+        confirmButton.setVisibility(View.GONE);
+        confirmButton.setEnabled(false);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(R.string.tools_scan_login)
@@ -128,12 +146,33 @@ public class ActivityTools extends AppCompatActivity {
             }
         });
 
+        confirmButton.setOnClickListener(v -> {
+            WebHttpRouter.PendingWebLoginInfo pendingInfo = WebHttpRouter.getLatestPendingWebLoginInfo();
+            if (pendingInfo == null) {
+                Toast.makeText(this, R.string.tools_scan_login_failed, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            confirmButton.setEnabled(false);
+            new Thread(() -> {
+                boolean success = WebHttpRouter.confirmPendingWebLogin(pendingInfo.sessionId, pendingInfo.token) != null;
+                runOnUiThread(() -> {
+                    confirmButton.setEnabled(true);
+                    Toast.makeText(this, success ? R.string.tools_scan_login_success : R.string.tools_scan_login_failed, Toast.LENGTH_SHORT).show();
+                    if (success) {
+                        dialog.dismiss();
+                    }
+                });
+            }).start();
+        });
+
         scanButton.setOnClickListener(v -> {
             dialog.dismiss();
             startCameraScan();
         });
 
+        dialog.setOnDismissListener(d -> stopPendingWebLoginPolling());
         dialog.show();
+        startPendingWebLoginPolling(confirmButton, hintText);
     }
 
     private void startCameraScan() {
@@ -206,6 +245,37 @@ public class ActivityTools extends AppCompatActivity {
                 connection.disconnect();
             }
         }
+    }
+
+    private void startPendingWebLoginPolling(@NonNull MaterialButton confirmButton, @Nullable TextView hintText) {
+        stopPendingWebLoginPolling();
+        pendingWebLoginPoll = new Runnable() {
+            @Override
+            public void run() {
+                WebHttpRouter.PendingWebLoginInfo pendingInfo = WebHttpRouter.getLatestPendingWebLoginInfo();
+                boolean ready = pendingInfo != null;
+                confirmButton.setVisibility(ready ? View.VISIBLE : View.GONE);
+                confirmButton.setEnabled(ready);
+                if (hintText != null) {
+                    hintText.setText(ready ? R.string.tools_scan_login_confirm_ready : R.string.tools_scan_login_confirm_waiting);
+                }
+                handler.postDelayed(this, WEB_LOGIN_STATUS_POLL_INTERVAL_MS);
+            }
+        };
+        handler.post(pendingWebLoginPoll);
+    }
+
+    private void stopPendingWebLoginPolling() {
+        if (pendingWebLoginPoll != null) {
+            handler.removeCallbacks(pendingWebLoginPoll);
+            pendingWebLoginPoll = null;
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        stopPendingWebLoginPolling();
+        super.onDestroy();
     }
 
     public static final class ToolItem {

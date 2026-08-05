@@ -13,6 +13,7 @@ public final class UserSessionSnapshot {
     public final long disconnectTime;
     public final long messageCount;
     public final boolean online;
+    public final boolean typing;
 
     public UserSessionSnapshot(@NonNull String userName,
                                @NonNull String address,
@@ -20,7 +21,8 @@ public final class UserSessionSnapshot {
                                long lastActiveTime,
                                long disconnectTime,
                                long messageCount,
-                               boolean online) {
+                               boolean online,
+                               boolean typing) {
         this.userName = userName;
         this.address = address;
         this.connectTime = connectTime;
@@ -28,6 +30,7 @@ public final class UserSessionSnapshot {
         this.disconnectTime = disconnectTime;
         this.messageCount = messageCount;
         this.online = online;
+        this.typing = typing;
     }
 
     @NonNull

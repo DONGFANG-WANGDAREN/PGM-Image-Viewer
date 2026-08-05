@@ -4,7 +4,9 @@ package com.DONGFANG_WANGDAREN.Station_RX.ui.activity;
 import com.DONGFANG_WANGDAREN.Station_RX.R;
 import com.DONGFANG_WANGDAREN.Station_RX.app.AppLogger;
 import com.DONGFANG_WANGDAREN.Station_RX.rust.RustServerBridge;
+import com.DONGFANG_WANGDAREN.Station_RX.websocket.WebHttpRouter;
 import com.DONGFANG_WANGDAREN.Station_RX.websocket.WebSocketService;
+import com.DONGFANG_WANGDAREN.Station_RX.websocket.WebSocketServiceStatsSnapshot;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -36,9 +38,10 @@ public class ActivityWebSocketDashboard extends AppCompatActivity {
     private static final String TAG = "ActivityWebSocketDashboard";
     private static final int DASHBOARD_ITEM_SPACING_DP = 12;
 
-    private static final int ID_CHAT_ROOM = 0;
-    private static final int ID_SCAN_LOGIN = 1;
-    private static final int ID_RUST_SERVER = 2;
+    private static final int ID_READER = 0;
+    private static final int ID_CHAT_ROOM = 1;
+    private static final int ID_FILE_TRANSFER = 2;
+    private static final int ID_RUST_SERVER = 3;
 
     private final List<ServiceItem> items = new ArrayList<>();
     private ServiceAdapter adapter;
@@ -118,12 +121,40 @@ public class ActivityWebSocketDashboard extends AppCompatActivity {
     private void refreshItems() {
         items.clear();
 
+        ActivityPictureViewer.ReaderDashboardSnapshot readerSnapshot = ActivityPictureViewer.getReaderDashboardSnapshot();
+        String readerStatus;
+        if (readerSnapshot.opened) {
+            readerStatus = readerSnapshot.fileName
+                    + "\n" + readerSnapshot.filePath
+                    + "\n" + getString(R.string.dashboard_reader_status_detail,
+                    readerSnapshot.openModeLabel,
+                    formatBytes(readerSnapshot.fileSizeBytes),
+                    formatBytes(readerSnapshot.usedMemoryBytes));
+        } else {
+            readerStatus = getString(R.string.dashboard_reader_status_empty, formatBytes(readerSnapshot.usedMemoryBytes));
+        }
+        items.add(new ServiceItem(ID_READER, getString(R.string.dashboard_reader), readerStatus, true));
+
         boolean chatRunning = webSocketService != null && webSocketService.isRunning();
         String chatStatus;
         if (chatRunning && webSocketService != null) {
-            chatStatus = getString(R.string.dashboard_status_running,
-                    webSocketService.getConnectedClientCount(),
-                    webSocketService.getTotalMessagesSent());
+            WebSocketServiceStatsSnapshot snapshot = webSocketService.getServiceStatsSnapshot();
+            String typingSummary = snapshot.typingUsers > 0
+                    ? getString(R.string.dashboard_chat_typing_users, snapshot.typingUsersSummary)
+                    : getString(R.string.dashboard_chat_typing_idle);
+            chatStatus = getString(
+                    R.string.dashboard_chat_status_detail,
+                    snapshot.activeUsers,
+                    snapshot.totalUniqueUsers,
+                    snapshot.offlineUsers,
+                    snapshot.totalTextMessages,
+                    snapshot.totalImageMessages,
+                    snapshot.totalSystemMessages,
+                    snapshot.formatBytesPerSecond(snapshot.averageBytesReceivedPerSecond),
+                    snapshot.formatBytesPerSecond(snapshot.averageBytesSentPerSecond),
+                    snapshot.wifiLinkSpeedMbps < 0 ? getString(R.string.stats_unavailable) : snapshot.wifiLinkSpeedMbps + " Mbps",
+                    typingSummary
+            );
         } else {
             chatStatus = getString(R.string.dashboard_status_stopped);
         }
@@ -131,14 +162,13 @@ public class ActivityWebSocketDashboard extends AppCompatActivity {
 
         boolean scanLoginRunning = chatRunning;
         String scanLoginStatus = scanLoginRunning ? getString(R.string.dashboard_status_running_simple) : getString(R.string.dashboard_status_stopped);
-        String loginUrl = webSocketService != null ? webSocketService.getLoginUrl() : null;
-        String secureLoginUrl = webSocketService != null ? webSocketService.getSecureLoginUrl() : null;
+        String loginUrl = webSocketService != null ? webSocketService.getWebLoginUrl() : null;
         if (scanLoginRunning && loginUrl != null && !loginUrl.isEmpty()) {
-            scanLoginStatus = getString(
-                    R.string.dashboard_status_running_with_address,
-                    com.DONGFANG_WANGDAREN.Station_RX.websocket.LanServerHelper.buildAddressBlock(loginUrl, secureLoginUrl));
+            WebHttpRouter.PendingWebLoginInfo pendingInfo = WebHttpRouter.getLatestPendingWebLoginInfo();
+            scanLoginStatus = loginUrl + "\n" + getString(
+                    pendingInfo != null ? R.string.dashboard_file_transfer_pending : R.string.dashboard_file_transfer_idle);
         }
-        items.add(new ServiceItem(ID_SCAN_LOGIN, getString(R.string.dashboard_scan_login), scanLoginStatus, scanLoginRunning));
+        items.add(new ServiceItem(ID_FILE_TRANSFER, getString(R.string.dashboard_file_transfer), scanLoginStatus, scanLoginRunning));
 
         boolean rustRunning = RustServerBridge.isRunning();
         String rustStatus = rustRunning ? getString(R.string.dashboard_status_running_simple) : getString(R.string.dashboard_status_stopped);
@@ -157,16 +187,38 @@ public class ActivityWebSocketDashboard extends AppCompatActivity {
         }
         ServiceItem item = items.get(position);
         switch (item.id) {
+            case ID_READER:
+                startActivity(new Intent(this, ActivityReaderStats.class));
+                break;
             case ID_CHAT_ROOM:
                 startActivity(new Intent(this, ActivityWebSocketStats.class));
                 break;
-            case ID_SCAN_LOGIN:
-                startActivity(new Intent(this, ActivityTools.class));
+            case ID_FILE_TRANSFER:
+                Intent fileTransferIntent = new Intent(this, ActivityTools.class);
+                fileTransferIntent.putExtra(ActivityTools.EXTRA_OPEN_SCAN_LOGIN, true);
+                startActivity(fileTransferIntent);
                 break;
             case ID_RUST_SERVER:
                 startActivity(new Intent(this, ActivityRustServer.class));
                 break;
         }
+    }
+
+    @NonNull
+    private String formatBytes(long bytes) {
+        if (bytes < 0) {
+            return getString(R.string.stats_unavailable);
+        }
+        if (bytes < 1024) {
+            return bytes + " B";
+        }
+        if (bytes < 1024 * 1024) {
+            return String.format(java.util.Locale.US, "%.2f KB", bytes / 1024.0);
+        }
+        if (bytes < 1024L * 1024 * 1024) {
+            return String.format(java.util.Locale.US, "%.2f MB", bytes / (1024.0 * 1024.0));
+        }
+        return String.format(java.util.Locale.US, "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0));
     }
 
     private int dpToPx(int dp) {

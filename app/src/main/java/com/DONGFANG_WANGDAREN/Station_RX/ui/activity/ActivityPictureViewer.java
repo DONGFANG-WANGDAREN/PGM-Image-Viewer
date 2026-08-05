@@ -109,6 +109,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private static final String JSON_KEY_FILE_NAME = "file_name";
     private static final String JSON_KEY_FILE_PATH = "file_path";
     private static final String JSON_KEY_FILE_SIZE = "file_size";
+    @NonNull
+    private static volatile ReaderDashboardSnapshot readerDashboardSnapshot = new ReaderDashboardSnapshot("", "", "", -1, 0, 0, false);
     private ActivityResultLauncher<String[]> launcherOpenDocument;
     private ActivityResultLauncher<Intent> launcherManageAllFilesAccess;
     private MaterialButton buttonOpenPgm;
@@ -156,6 +158,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private int currentSearchIndex = -1;
     private int currentOpenRequestId = 0;
     private String currentFileName = "";
+    private String currentFilePath = "";
     @Nullable
     private Uri currentOpenedFileUri;
     private String currentOpenMode = OPEN_MODE_UNSUPPORTED;
@@ -166,6 +169,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private boolean markdownPreviewMode;
     private boolean startupIntentHandled;
     private float currentTextSizeSp = AppConfig.get().getDefaultTextSizeSp();
+    private long currentFileSizeBytes = -1;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -922,6 +926,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
 
     private void updateCurrentFileInfo(@Nullable String fileName, @Nullable String filePath, long fileSize) {
         currentFileName = fileName == null ? "" : fileName;
+        currentFilePath = filePath == null ? "" : filePath;
+        currentFileSizeBytes = fileSize;
         if (isNullOrEmpty(fileName)) {
             textViewCurrentFileTitle.setText(R.string.current_file_default_title);
         } else {
@@ -930,6 +936,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         if (isNullOrEmpty(filePath)) {
             textViewCurrentFilePath.setText(R.string.current_file_default_path);
             updateTextLargeWarningVisible(false);
+            updateReaderDashboardSnapshot(fileName, "", fileSize);
             return;
         }
         String sizeText = formatFileSize(fileSize);
@@ -938,6 +945,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         } else {
             textViewCurrentFilePath.setText(filePath + " · " + sizeText);
         }
+        updateReaderDashboardSnapshot(fileName, filePath, fileSize);
     }
 
     private void updateTextLargeWarningVisible(boolean visible) {
@@ -985,6 +993,56 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private void updateCurrentOpenTarget(@Nullable Uri uri, @NonNull String openMode) {
         currentOpenedFileUri = uri;
         currentOpenMode = openMode;
+        updateReaderDashboardSnapshot(currentFileName, currentFilePath, currentFileSizeBytes);
+    }
+
+    private void updateReaderDashboardSnapshot(@Nullable String fileName, @Nullable String filePath, long fileSize) {
+        String normalizedName = fileName == null ? "" : fileName;
+        String normalizedPath = filePath == null ? "" : filePath;
+        String openModeLabel = mapOpenModeLabel(currentOpenMode);
+        long usedMemoryBytes = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+        long maxHeapBytes = Runtime.getRuntime().maxMemory();
+        boolean opened = !isNullOrEmpty(normalizedName);
+        readerDashboardSnapshot = new ReaderDashboardSnapshot(
+                normalizedName,
+                normalizedPath,
+                openModeLabel,
+                fileSize,
+                usedMemoryBytes,
+                maxHeapBytes,
+                opened
+        );
+    }
+
+    @NonNull
+    private String mapOpenModeLabel(@NonNull String openMode) {
+        switch (openMode) {
+            case OPEN_MODE_PGM:
+                return "PGM";
+            case OPEN_MODE_TEXT:
+                return "Text";
+            case OPEN_MODE_DOCX:
+                return "DOCX";
+            case OPEN_MODE_IMAGE:
+                return "Image";
+            case OPEN_MODE_VIDEO:
+                return "Video";
+            case OPEN_MODE_AUDIO:
+                return "Audio";
+            case OPEN_MODE_PDF:
+                return "PDF";
+            case OPEN_MODE_SPREADSHEET:
+                return "Spreadsheet";
+            case OPEN_MODE_EXTERNAL:
+                return "External";
+            default:
+                return "Unknown";
+        }
+    }
+
+    @NonNull
+    public static ReaderDashboardSnapshot getReaderDashboardSnapshot() {
+        return readerDashboardSnapshot;
     }
 
     private void scheduleTextQuickScrollUpdate() {
@@ -1891,6 +1949,35 @@ public class ActivityPictureViewer extends AppCompatActivity {
         @NonNull
         private static OpenedFileContent forMedia(@NonNull Uri mediaUri) {
             return new OpenedFileContent(null, null, mediaUri, false);
+        }
+    }
+
+    public static final class ReaderDashboardSnapshot {
+        @NonNull
+        public final String fileName;
+        @NonNull
+        public final String filePath;
+        @NonNull
+        public final String openModeLabel;
+        public final long fileSizeBytes;
+        public final long usedMemoryBytes;
+        public final long maxHeapBytes;
+        public final boolean opened;
+
+        ReaderDashboardSnapshot(@NonNull String fileName,
+                                @NonNull String filePath,
+                                @NonNull String openModeLabel,
+                                long fileSizeBytes,
+                                long usedMemoryBytes,
+                                long maxHeapBytes,
+                                boolean opened) {
+            this.fileName = fileName;
+            this.filePath = filePath;
+            this.openModeLabel = openModeLabel;
+            this.fileSizeBytes = fileSizeBytes;
+            this.usedMemoryBytes = usedMemoryBytes;
+            this.maxHeapBytes = maxHeapBytes;
+            this.opened = opened;
         }
     }
 }

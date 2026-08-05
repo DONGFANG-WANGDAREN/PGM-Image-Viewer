@@ -39,15 +39,12 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 
 import fi.iki.elonen.NanoHTTPD;
 
-import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
-import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.ArrayList;
@@ -65,8 +62,6 @@ public class WebSocketService extends Service {
     private static final String ACTION_REFRESH_NOTIFICATION = "com.DONGFANG_WANGDAREN.Station_RX.REFRESH_SERVICES_NOTIFICATION";
     private static final String NOTIFICATION_CHANNEL_ID = "websocket_service_channel";
     private static final int NOTIFICATION_ID = 1;
-    private static final String DEBUG_SERVER_URL = "http://192.168.1.68:7777/event";
-    private static final String DEBUG_SESSION_ID = "https-login-failure";
 
     private final IBinder binder = new LocalBinder();
     private final BroadcastReceiver refreshNotificationReceiver = new BroadcastReceiver() {
@@ -88,8 +83,6 @@ public class WebSocketService extends Service {
     @Nullable
     private ReaderHttpServer httpServer;
     @Nullable
-    private ReaderHttpServer httpsServer;
-    @Nullable
     private WebHttpRouter httpRouter;
     private boolean running;
     private int connectedClientCount;
@@ -97,12 +90,10 @@ public class WebSocketService extends Service {
     private String lastMessagePreview;
     private int activeWebSocketPort = -1;
     private int activeHttpPort = -1;
-    private int activeHttpsPort = -1;
     @NonNull
     private String activeDisplayHost = "127.0.0.1";
     private static volatile int runtimeWebSocketPort = -1;
     private static volatile int runtimeHttpPort = -1;
-    private static volatile int runtimeHttpsPort = -1;
     @NonNull
     private static volatile String runtimeDisplayHost = "127.0.0.1";
     private static volatile boolean runtimeRunning;
@@ -113,6 +104,9 @@ public class WebSocketService extends Service {
     private int peakActiveUsers;
     private long bytesReceived;
     private long bytesSent;
+    private long totalTextMessages;
+    private long totalImageMessages;
+    private long totalSystemMessages;
     private long serverStartTime;
 
     @NonNull
@@ -246,16 +240,12 @@ public class WebSocketService extends Service {
             openChatFile();
             String address = getServerAddress();
             String httpAddress = getHttpAddress();
-            String httpsAddress = getHttpsAddress();
             if (activeWebSocketPort != config.getWebSocketPort()) {
                 log("WebSocket port " + config.getWebSocketPort() + " was busy, switched to " + activeWebSocketPort);
             }
             log("WebSocket server started at " + address);
             if (httpAddress != null) {
                 log("Browser page available at " + httpAddress);
-            }
-            if (httpsAddress != null) {
-                log("Secure browser page available at " + httpsAddress);
             }
             notifyServerStarted(address);
         } catch (Exception exception) {
@@ -323,9 +313,9 @@ public class WebSocketService extends Service {
         bigTextBuilder.append("\n");
         bigTextBuilder.append(getString(R.string.service_scan_login)).append(": ");
         bigTextBuilder.append(running ? getString(R.string.service_status_running) : getString(R.string.service_status_stopped));
-        String loginUrl = getLoginUrl();
-        if (running && loginUrl != null && !loginUrl.isEmpty()) {
-            bigTextBuilder.append(" · ").append(loginUrl);
+        String webLoginUrl = getWebLoginUrl();
+        if (running && webLoginUrl != null && !webLoginUrl.isEmpty()) {
+            bigTextBuilder.append(" · ").append(webLoginUrl);
         }
         bigTextBuilder.append("\n");
         bigTextBuilder.append(getString(R.string.service_rust_server)).append(": ");
@@ -550,10 +540,6 @@ public class WebSocketService extends Service {
         return activeHttpPort > 0 ? activeHttpPort : AppConfig.get().getHttpPort();
     }
 
-    public int getHttpsPort() {
-        return activeHttpsPort;
-    }
-
     /**
      * Returns the estimated app process CPU usage as a percentage, or -1 if it cannot be read.
      */
@@ -564,6 +550,24 @@ public class WebSocketService extends Service {
     @NonNull
     public WebSocketServiceStatsSnapshot getServiceStatsSnapshot() {
         long uptime = running ? Math.max(0, System.currentTimeMillis() - serverStartTime) : 0;
+        cleanupTypingStates();
+        int offlineUsers = 0;
+        int typingUsers = 0;
+        StringBuilder typingUsersSummary = new StringBuilder();
+        for (UserSession session : userSessions.values()) {
+            if (!session.online) {
+                offlineUsers++;
+            }
+            if (session.typing) {
+                typingUsers++;
+                if (typingUsersSummary.length() > 0) {
+                    typingUsersSummary.append(", ");
+                }
+                typingUsersSummary.append(session.userName);
+            }
+        }
+        double averageBytesReceivedPerSecond = uptime <= 0 ? 0 : (bytesReceived * 1000.0 / uptime);
+        double averageBytesSentPerSecond = uptime <= 0 ? 0 : (bytesSent * 1000.0 / uptime);
         return new WebSocketServiceStatsSnapshot(
                 running,
                 uptime,
@@ -571,21 +575,30 @@ public class WebSocketService extends Service {
                 totalMessagesSent,
                 totalUniqueUsers,
                 connectedClientCount,
+                offlineUsers,
                 peakActiveUsers,
                 getWebSocketPort(),
                 getHttpPort(),
                 getProcessCpuUsage(),
                 bytesReceived,
                 bytesSent,
+                averageBytesReceivedPerSecond,
+                averageBytesSentPerSecond,
                 NetworkInfoHelper.getWifiLinkSpeedMbps(this),
                 NetworkInfoHelper.getWifiSignalDbm(this),
                 NetworkInfoHelper.getWifiSignalLevel(this),
-                NetworkInfoHelper.isWifiConnected(this)
+                NetworkInfoHelper.isWifiConnected(this),
+                totalTextMessages,
+                totalImageMessages,
+                totalSystemMessages,
+                typingUsers,
+                typingUsersSummary.toString()
         );
     }
 
     @NonNull
     public List<UserSessionSnapshot> getUserSessionSnapshots() {
+        cleanupTypingStates();
         List<UserSessionSnapshot> result = new ArrayList<>();
         for (UserSession session : userSessions.values()) {
             result.add(new UserSessionSnapshot(
@@ -595,7 +608,8 @@ public class WebSocketService extends Service {
                     session.lastActiveTime,
                     session.disconnectTime,
                     session.messageCount,
-                    session.online
+                    session.online,
+                    session.typing
             ));
         }
         return result;
@@ -608,6 +622,9 @@ public class WebSocketService extends Service {
         peakActiveUsers = 0;
         bytesReceived = 0;
         bytesSent = 0;
+        totalTextMessages = 0;
+        totalImageMessages = 0;
+        totalSystemMessages = 0;
         serverStartTime = System.currentTimeMillis();
         lastMessagePreview = null;
         userSessions.clear();
@@ -630,33 +647,22 @@ public class WebSocketService extends Service {
     }
 
     @Nullable
-    public String getHttpsAddress() {
-        if (activeHttpsPort <= 0) {
-            return null;
-        }
-        return LanServerHelper.buildAddress("https", activeDisplayHost, activeHttpsPort);
-    }
-
-    @Nullable
     public String getBrowserAddress() {
         String httpAddress = getHttpAddress();
-        if (httpAddress != null && !httpAddress.isEmpty()) {
-            return httpAddress;
-        }
-        return getHttpsAddress();
+        return httpAddress != null && !httpAddress.isEmpty() ? httpAddress : null;
     }
 
     @Nullable
-    public String getSecureBrowserAddress() {
-        String httpsAddress = getHttpsAddress();
-        if (httpsAddress != null && !httpsAddress.isEmpty()) {
-            return httpsAddress;
+    public String getChatUrl() {
+        String browserAddress = getBrowserAddress();
+        if (browserAddress == null || browserAddress.isEmpty()) {
+            return null;
         }
-        return getHttpAddress();
+        return browserAddress + "/chat";
     }
 
     @Nullable
-    public String getLoginUrl() {
+    public String getWebLoginUrl() {
         String browserAddress = getBrowserAddress();
         if (browserAddress == null || browserAddress.isEmpty()) {
             return null;
@@ -664,17 +670,8 @@ public class WebSocketService extends Service {
         return browserAddress + "/web-login";
     }
 
-    @Nullable
-    public String getSecureLoginUrl() {
-        String browserAddress = getSecureBrowserAddress();
-        if (browserAddress == null || browserAddress.isEmpty()) {
-            return null;
-        }
-        return browserAddress + "/web-login";
-    }
-
     private void startHttpServer() {
-        if (httpServer != null || httpsServer != null) {
+        if (httpServer != null) {
             return;
         }
         try {
@@ -684,41 +681,11 @@ public class WebSocketService extends Service {
             activeHttpPort = LanServerHelper.findAvailablePort(preferredHttpPort);
             httpServer = new ReaderHttpServer(activeHttpPort);
             httpServer.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false);
-            // #region debug-point A:http-server-started
-            reportDebug("A", "WebSocketService:startHttpServer", "[DEBUG] HTTP server started", "\"preferredHttpPort\":" + preferredHttpPort + ",\"activeHttpPort\":" + activeHttpPort + ",\"httpListeningPort\":" + httpServer.getListeningPort() + ",\"httpAlive\":" + httpServer.isAlive());
-            // #endregion
             if (activeHttpPort != preferredHttpPort) {
                 log("HTTP port " + preferredHttpPort + " was busy, switched to " + activeHttpPort);
             }
-            try {
-                int preferredHttpsPort = Math.max(preferredHttpPort + 1, activeHttpPort + 1);
-                activeHttpsPort = LanServerHelper.findAvailablePort(preferredHttpsPort);
-                httpsServer = new ReaderHttpServer(activeHttpsPort);
-                // #region debug-point D:https-server-pre-start
-                reportDebug("D", "WebSocketService:startHttpServer", "[DEBUG] HTTPS server preparing to start", "\"preferredHttpsPort\":" + preferredHttpsPort + ",\"activeHttpsPort\":" + activeHttpsPort + ",\"displayHost\":\"" + escapeJson(activeDisplayHost) + "\"");
-                // #endregion
-                httpsServer.makeSecure(LocalHttpsHelper.createServerSocketFactory(), new String[]{"TLSv1.3", "TLSv1.2"});
-                httpsServer.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false);
-                // #region debug-point A:https-server-started
-                reportDebug("A", "WebSocketService:startHttpServer", "[DEBUG] HTTPS server started", "\"preferredHttpsPort\":" + preferredHttpsPort + ",\"activeHttpsPort\":" + activeHttpsPort + ",\"httpsListeningPort\":" + httpsServer.getListeningPort() + ",\"httpsAlive\":" + httpsServer.isAlive());
-                // #endregion
-                if (activeHttpsPort != preferredHttpsPort) {
-                    log("HTTPS port " + preferredHttpsPort + " was busy, switched to " + activeHttpsPort);
-                }
-            } catch (Exception httpsException) {
-                activeHttpsPort = -1;
-                httpsServer = null;
-                // #region debug-point B:https-server-failed
-                reportDebug("B", "WebSocketService:startHttpServer", "[DEBUG] HTTPS server failed to start", "\"errorType\":\"" + httpsException.getClass().getSimpleName() + "\",\"errorMessage\":\"" + escapeJson(httpsException.getMessage()) + "\"");
-                // #endregion
-                log("HTTPS server unavailable: " + httpsException.getMessage());
-                AppLogger.e(TAG, "Failed to start HTTPS server.", httpsException);
-            }
         } catch (Exception exception) {
             activeHttpPort = -1;
-            // #region debug-point A:http-server-failed
-            reportDebug("A", "WebSocketService:startHttpServer", "[DEBUG] HTTP server failed to start", "\"errorType\":\"" + exception.getClass().getSimpleName() + "\",\"errorMessage\":\"" + escapeJson(exception.getMessage()) + "\"");
-            // #endregion
             log("Failed to start HTTP server: " + exception.getMessage());
             AppLogger.e(TAG, "Failed to start HTTP server.", exception);
         }
@@ -729,14 +696,9 @@ public class WebSocketService extends Service {
             httpServer.stop();
             httpServer = null;
         }
-        if (httpsServer != null) {
-            httpsServer.stop();
-            httpsServer = null;
-        }
         httpRouter = null;
         httpAuthToken = "";
         activeHttpPort = -1;
-        activeHttpsPort = -1;
     }
 
     @NonNull
@@ -799,9 +761,38 @@ public class WebSocketService extends Service {
         webSocketServer.broadcast(message);
         totalMessagesSent++;
         bytesSent += message.getBytes(StandardCharsets.UTF_8).length;
+        countOutgoingMessageType(message);
         appendChatMessage(message);
         notifyImageMessageIfNeeded(message);
         updateNotificationForMessage(message);
+    }
+
+    private void countOutgoingMessageType(@NonNull String message) {
+        try {
+            JSONObject jsonObject = new JSONObject(message);
+            String type = jsonObject.optString("type", AppConfig.get().getMessageTypeText());
+            boolean system = jsonObject.optBoolean("system", false);
+            if (system) {
+                totalSystemMessages++;
+                return;
+            }
+            if (AppConfig.get().getMessageTypeImage().equals(type)) {
+                totalImageMessages++;
+                return;
+            }
+            totalTextMessages++;
+        } catch (JSONException exception) {
+            totalTextMessages++;
+        }
+    }
+
+    private void cleanupTypingStates() {
+        long now = System.currentTimeMillis();
+        for (UserSession session : userSessions.values()) {
+            if (session.typing && now - session.lastTypingAt > 3000L) {
+                session.typing = false;
+            }
+        }
     }
 
     private void notifyImageMessageIfNeeded(@NonNull String message) {
@@ -966,13 +957,11 @@ public class WebSocketService extends Service {
         runtimeDisplayHost = activeDisplayHost;
         runtimeWebSocketPort = serverRunning ? activeWebSocketPort : -1;
         runtimeHttpPort = serverRunning ? activeHttpPort : -1;
-        runtimeHttpsPort = serverRunning ? activeHttpsPort : -1;
     }
 
     private void clearRuntimePorts() {
         activeWebSocketPort = -1;
         activeHttpPort = -1;
-        activeHttpsPort = -1;
         activeDisplayHost = LanServerHelper.getDisplayHost();
         updateRuntimeState(false);
     }
@@ -982,27 +971,7 @@ public class WebSocketService extends Service {
         if (!runtimeRunning) {
             return null;
         }
-        if (runtimeHttpPort > 0) {
-            return LanServerHelper.buildAddress("http", runtimeDisplayHost, runtimeHttpPort);
-        }
-        if (runtimeHttpsPort > 0) {
-            return LanServerHelper.buildAddress("https", runtimeDisplayHost, runtimeHttpsPort);
-        }
-        return null;
-    }
-
-    @Nullable
-    public static String getRunningSecureBrowserAddress() {
-        if (!runtimeRunning) {
-            return null;
-        }
-        if (runtimeHttpsPort > 0) {
-            return LanServerHelper.buildAddress("https", runtimeDisplayHost, runtimeHttpsPort);
-        }
-        if (runtimeHttpPort > 0) {
-            return LanServerHelper.buildAddress("http", runtimeDisplayHost, runtimeHttpPort);
-        }
-        return null;
+        return runtimeHttpPort > 0 ? LanServerHelper.buildAddress("http", runtimeDisplayHost, runtimeHttpPort) : null;
     }
 
     public static int getRunningHttpPort() {
@@ -1015,7 +984,18 @@ public class WebSocketService extends Service {
     }
 
     @NonNull
-    public static String getPreferredLoginUrl() {
+    public static String getPreferredChatUrl() {
+        String runningAddress = getRunningBrowserAddress();
+        if (runningAddress != null && !runningAddress.isEmpty()) {
+            return runningAddress + "/chat";
+        }
+        String displayHost = LanServerHelper.getDisplayHost();
+        int predictedHttpPort = LanServerHelper.findAvailablePort(AppConfig.get().getHttpPort());
+        return LanServerHelper.buildAddress("http", displayHost, predictedHttpPort) + "/chat";
+    }
+
+    @NonNull
+    public static String getPreferredWebLoginUrl() {
         String runningAddress = getRunningBrowserAddress();
         if (runningAddress != null && !runningAddress.isEmpty()) {
             return runningAddress + "/web-login";
@@ -1023,50 +1003,6 @@ public class WebSocketService extends Service {
         String displayHost = LanServerHelper.getDisplayHost();
         int predictedHttpPort = LanServerHelper.findAvailablePort(AppConfig.get().getHttpPort());
         return LanServerHelper.buildAddress("http", displayHost, predictedHttpPort) + "/web-login";
-    }
-
-    @NonNull
-    public static String getPreferredSecureLoginUrl() {
-        String runningAddress = getRunningSecureBrowserAddress();
-        if (runningAddress != null && !runningAddress.isEmpty()) {
-            return runningAddress + "/web-login";
-        }
-        String displayHost = LanServerHelper.getDisplayHost();
-        int predictedHttpPort = LanServerHelper.findAvailablePort(AppConfig.get().getHttpPort());
-        int predictedHttpsPort = LanServerHelper.findAvailablePort(Math.max(AppConfig.get().getHttpPort() + 1, predictedHttpPort + 1));
-        return LanServerHelper.buildAddress("https", displayHost, predictedHttpsPort) + "/web-login";
-    }
-
-    private void reportDebug(@NonNull String hypothesisId, @NonNull String location, @NonNull String msg, @NonNull String dataJson) {
-        new Thread(() -> {
-            HttpURLConnection connection = null;
-            try {
-                connection = (HttpURLConnection) new URL(DEBUG_SERVER_URL).openConnection();
-                connection.setConnectTimeout(1500);
-                connection.setReadTimeout(1500);
-                connection.setRequestMethod("POST");
-                connection.setDoOutput(true);
-                connection.setRequestProperty("Content-Type", "application/json");
-                String payload = "{\"sessionId\":\"" + DEBUG_SESSION_ID + "\",\"runId\":\"pre-fix\",\"hypothesisId\":\"" + hypothesisId + "\",\"location\":\"" + location + "\",\"msg\":\"" + escapeJson(msg) + "\",\"data\":{" + dataJson + "},\"ts\":" + System.currentTimeMillis() + "}";
-                try (OutputStream outputStream = connection.getOutputStream()) {
-                    outputStream.write(payload.getBytes(StandardCharsets.UTF_8));
-                }
-                connection.getResponseCode();
-            } catch (Exception ignored) {
-            } finally {
-                if (connection != null) {
-                    connection.disconnect();
-                }
-            }
-        }).start();
-    }
-
-    @NonNull
-    private String escapeJson(@Nullable String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r");
     }
 
     private final class ReaderWebSocketServer extends WebSocketServer {
@@ -1093,6 +1029,7 @@ public class WebSocketService extends Service {
             String userName = clientNames.remove(conn);
             UserSession session = userSessions.get(conn);
             if (session != null) {
+                session.typing = false;
                 session.markOffline();
             }
             setConnectedClientCount(getConnections().size());
@@ -1105,12 +1042,16 @@ public class WebSocketService extends Service {
 
         @Override
         public void onMessage(@NonNull WebSocket conn, @NonNull String message) {
+            UserSession session = userSessions.get(conn);
+            if (handleClientTypingEvent(session, message)) {
+                return;
+            }
             totalMessagesReceived++;
             bytesReceived += message.getBytes(StandardCharsets.UTF_8).length;
-            UserSession session = userSessions.get(conn);
             if (session != null) {
                 session.messageCount++;
                 session.lastActiveTime = System.currentTimeMillis();
+                session.typing = false;
             }
             String userName = clientNames.get(conn);
             if (userName == null) {
@@ -1130,6 +1071,28 @@ public class WebSocketService extends Service {
         @Override
         public void onStart() {
             log("Server thread started on port " + getPort() + ".");
+        }
+    }
+
+    private boolean handleClientTypingEvent(@Nullable UserSession session, @NonNull String message) {
+        if (session == null) {
+            return false;
+        }
+        String trimmed = message.trim();
+        if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+            return false;
+        }
+        try {
+            JSONObject jsonObject = new JSONObject(trimmed);
+            if (!"typing".equals(jsonObject.optString("clientEvent"))) {
+                return false;
+            }
+            session.typing = jsonObject.optBoolean("typing", false);
+            session.lastTypingAt = System.currentTimeMillis();
+            session.lastActiveTime = session.lastTypingAt;
+            return true;
+        } catch (JSONException exception) {
+            return false;
         }
     }
 
@@ -1160,6 +1123,8 @@ public class WebSocketService extends Service {
         public long disconnectTime;
         public long messageCount;
         public boolean online;
+        public boolean typing;
+        public long lastTypingAt;
 
         UserSession(@NonNull String userName, @NonNull String address) {
             this.userName = userName;
@@ -1169,6 +1134,8 @@ public class WebSocketService extends Service {
             this.disconnectTime = -1;
             this.messageCount = 0;
             this.online = true;
+            this.typing = false;
+            this.lastTypingAt = 0;
         }
 
         void markOffline() {

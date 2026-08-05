@@ -84,15 +84,4 @@ public final class LanServerHelper {
     public static String buildAddress(@NonNull String scheme, @NonNull String host, int port) {
         return scheme + "://" + host + ":" + port;
     }
-
-    @NonNull
-    public static String buildAddressBlock(@Nullable String httpAddress, @Nullable String httpsAddress) {
-        if (httpsAddress != null && !httpsAddress.isEmpty() && httpAddress != null && !httpAddress.isEmpty()) {
-            return "HTTPS: " + httpsAddress + "\nHTTP: " + httpAddress;
-        }
-        if (httpsAddress != null && !httpsAddress.isEmpty()) {
-            return httpsAddress;
-        }
-        return httpAddress != null && !httpAddress.isEmpty() ? httpAddress : "Unknown";
-    }
 }

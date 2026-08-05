@@ -3,25 +3,35 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:layout_marginBottom="10dp"
     android:background="@drawable/bg_card_white"
-    android:orientation="vertical"
-    android:padding="16dp">
+    android:elevation="1dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="16dp"
+    android:paddingTop="15dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="15dp">
 
     <TextView
         android:id="@+id/text_view_stat_label"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_weight="1"
         android:textColor="@color/slate_700"
         android:textSize="13sp"
-        tools:text="Label" />
+        android:textStyle="bold"
+        tools:text="WebSocket 端口" />
 
     <TextView
         android:id="@+id/text_view_stat_value"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:gravity="end"
+        android:maxWidth="220dp"
         android:textColor="@color/slate_900"
         android:textSize="16sp"
-        tools:text="Value" />
+        android:textStyle="bold"
+        tools:text="8080" />
 
 </LinearLayout>

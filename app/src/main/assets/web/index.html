@@ -128,7 +128,10 @@ const logEl=document.getElementById('log');
 const statusEl=document.getElementById('status');
 const uploadStatusEl=document.getElementById('uploadStatus');
 const dropZone=document.getElementById('dropZone');
+const inputEl=document.getElementById('msg');
 let ws=null;
+let typingActive=false;
+let typingTimer=null;
 function escape(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
 function append(payload){
   try{
@@ -169,7 +172,17 @@ function connect(wsAddress){
   ws.onclose=function(){statusEl.textContent='Disconnected. Reconnecting...';setTimeout(function(){connect(wsAddress);},2000);};
   ws.onerror=function(e){statusEl.textContent='Connection error.';};
 }
-function send(){const input=document.getElementById('msg');const text=input.value.trim();if(text&&ws&&ws.readyState===1){ws.send(text);input.value='';}}
+function send(){const text=inputEl.value.trim();if(text&&ws&&ws.readyState===1){setTyping(false);ws.send(text);inputEl.value='';}}
+function setTyping(typing){
+  if(!ws||ws.readyState!==1)return;
+  if(typingActive===typing)return;
+  typingActive=typing;
+  ws.send(JSON.stringify({clientEvent:'typing',typing:typing}));
+}
+function queueTypingReset(){
+  if(typingTimer){clearTimeout(typingTimer);}
+  typingTimer=setTimeout(function(){setTyping(false);},1500);
+}
 function selectImage(){document.getElementById('imageInput').click();}
 async function onImageSelected(){const input=document.getElementById('imageInput');if(!input.files.length)return;await uploadImage(input.files[0]);input.value='';}
 async function uploadImage(file){
@@ -178,7 +191,14 @@ async function uploadImage(file){
     const form=new FormData();
     form.append('image',file,file.name);
     const r=await fetch('/api/chat/upload-image',{method:'POST',body:form});
-    const d=await r.json();
+    const raw=await r.text();
+    let d=null;
+    try{
+      d=raw?JSON.parse(raw):null;
+    }catch(parseError){
+      throw new Error('server returned '+r.status+(raw?': '+raw.slice(0,120):''));
+    }
+    if(!r.ok)throw new Error((d&&d.error)||('upload failed with '+r.status));
     if(!d.success)throw new Error(d.error||'upload failed');
     uploadStatusEl.textContent='Sent '+file.name;
   }catch(e){
@@ -195,12 +215,18 @@ function setupDragAndDrop(){
 }
 function openPreview(url){const box=document.getElementById('previewLightbox');const img=document.getElementById('previewImg');img.src=url;box.style.display='flex';}
 function closePreview(){document.getElementById('previewLightbox').style.display='none';}
-document.getElementById('msg').addEventListener('keypress',function(e){if(e.key==='Enter')send();});
+inputEl.addEventListener('input',function(){
+  const hasText=inputEl.value.trim().length>0;
+  setTyping(hasText);
+  if(hasText){queueTypingReset();}
+});
+inputEl.addEventListener('blur',function(){setTyping(false);});
+inputEl.addEventListener('keypress',function(e){if(e.key==='Enter')send();});
 async function init(){
   try{
     const r=await fetch('/api/config');
     const d=await r.json();
-    const browserAddress=d.browserAddress||d.httpsAddress||d.httpAddress||'';
+    const browserAddress=d.browserAddress||d.httpAddress||'';
     if(browserAddress){
       statusEl.textContent='Browser: '+browserAddress+' · loading websocket...';
     }

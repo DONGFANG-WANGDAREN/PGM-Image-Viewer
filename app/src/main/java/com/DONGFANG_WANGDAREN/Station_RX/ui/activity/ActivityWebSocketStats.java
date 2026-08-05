@@ -20,6 +20,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -38,6 +39,12 @@ public class ActivityWebSocketStats extends AppCompatActivity {
 
     private final List<Row> rows = new ArrayList<>();
     private StatsAdapter adapter;
+    private TextView overviewStatusValue;
+    private TextView overviewStatusHint;
+    private TextView overviewUsersValue;
+    private TextView overviewMessagesValue;
+    private TextView overviewTrafficValue;
+    private TextView overviewTypingValue;
     private WebSocketService webSocketService;
     private boolean bound;
     @Nullable
@@ -64,7 +71,14 @@ public class ActivityWebSocketStats extends AppCompatActivity {
         setContentView(R.layout.activity_web_socket_stats);
 
         MaterialToolbar toolbar = findViewById(R.id.toolbar_stats);
+        toolbar.setTitle(R.string.dashboard_chat_room);
         toolbar.setNavigationOnClickListener(view -> finish());
+        overviewStatusValue = findViewById(R.id.text_view_overview_status_value);
+        overviewStatusHint = findViewById(R.id.text_view_overview_status_hint);
+        overviewUsersValue = findViewById(R.id.text_view_overview_users_value);
+        overviewMessagesValue = findViewById(R.id.text_view_overview_messages_value);
+        overviewTrafficValue = findViewById(R.id.text_view_overview_traffic_value);
+        overviewTypingValue = findViewById(R.id.text_view_overview_typing_value);
 
         RecyclerView recyclerView = findViewById(R.id.recycler_view_stats);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
@@ -114,7 +128,7 @@ public class ActivityWebSocketStats extends AppCompatActivity {
         rows.clear();
         WebSocketServiceStatsSnapshot snapshot = webSocketService != null ? webSocketService.getServiceStatsSnapshot() : null;
         List<UserSessionSnapshot> users = webSocketService != null ? webSocketService.getUserSessionSnapshots() : new ArrayList<>();
-        long now = System.currentTimeMillis();
+        bindOverview(snapshot, users);
 
         rows.add(new Row(RowType.HEADER, getString(R.string.stats_header_service)));
         if (snapshot != null) {
@@ -124,6 +138,7 @@ public class ActivityWebSocketStats extends AppCompatActivity {
             rows.add(new Row(RowType.STAT, getString(R.string.stats_messages_sent), String.valueOf(snapshot.totalMessagesSent)));
             rows.add(new Row(RowType.STAT, getString(R.string.stats_total_users), String.valueOf(snapshot.totalUniqueUsers)));
             rows.add(new Row(RowType.STAT, getString(R.string.stats_active_users), String.valueOf(snapshot.activeUsers)));
+            rows.add(new Row(RowType.STAT, getString(R.string.stats_previous_users), String.valueOf(snapshot.offlineUsers)));
             rows.add(new Row(RowType.STAT, getString(R.string.stats_peak_active_users), String.valueOf(snapshot.peakActiveUsers)));
             rows.add(new Row(RowType.STAT, getString(R.string.stats_websocket_port), String.valueOf(snapshot.webSocketPort)));
             rows.add(new Row(RowType.STAT, getString(R.string.stats_http_port), String.valueOf(snapshot.httpPort)));
@@ -147,6 +162,16 @@ public class ActivityWebSocketStats extends AppCompatActivity {
             rows.add(new Row(RowType.STAT, getString(R.string.stats_wifi_signal), signalText));
             rows.add(new Row(RowType.STAT, getString(R.string.stats_bytes_received), snapshot.formatBytes(snapshot.bytesReceived)));
             rows.add(new Row(RowType.STAT, getString(R.string.stats_bytes_sent), snapshot.formatBytes(snapshot.bytesSent)));
+            rows.add(new Row(RowType.STAT, getString(R.string.stats_average_downlink), snapshot.formatBytesPerSecond(snapshot.averageBytesReceivedPerSecond)));
+            rows.add(new Row(RowType.STAT, getString(R.string.stats_average_uplink), snapshot.formatBytesPerSecond(snapshot.averageBytesSentPerSecond)));
+        }
+
+        rows.add(new Row(RowType.HEADER, getString(R.string.stats_header_message_types)));
+        if (snapshot != null) {
+            rows.add(new Row(RowType.STAT, getString(R.string.stats_text_messages), String.valueOf(snapshot.totalTextMessages)));
+            rows.add(new Row(RowType.STAT, getString(R.string.stats_image_messages), String.valueOf(snapshot.totalImageMessages)));
+            rows.add(new Row(RowType.STAT, getString(R.string.stats_system_messages), String.valueOf(snapshot.totalSystemMessages)));
+            rows.add(new Row(RowType.STAT, getString(R.string.stats_typing_users), snapshot.typingUsers > 0 ? snapshot.typingUsersSummary : getString(R.string.stats_typing_none)));
         }
 
         rows.add(new Row(RowType.HEADER, getString(R.string.stats_header_device)));
@@ -164,6 +189,41 @@ public class ActivityWebSocketStats extends AppCompatActivity {
         }
 
         adapter.notifyDataSetChanged();
+    }
+
+    private void bindOverview(@Nullable WebSocketServiceStatsSnapshot snapshot, @NonNull List<UserSessionSnapshot> users) {
+        if (snapshot == null) {
+            overviewStatusValue.setText(R.string.stats_stopped);
+            applyBadgeBackground(overviewStatusValue, R.drawable.bg_stats_badge_neutral);
+            overviewStatusHint.setText(R.string.stats_overview_status_stopped_hint);
+            overviewUsersValue.setText("0");
+            overviewMessagesValue.setText("0");
+            overviewTrafficValue.setText(getString(R.string.stats_unavailable));
+            overviewTypingValue.setText(getString(R.string.stats_typing_none));
+            return;
+        }
+        overviewStatusValue.setText(snapshot.running ? R.string.stats_running : R.string.stats_stopped);
+        applyBadgeBackground(overviewStatusValue, snapshot.running ? R.drawable.bg_stats_badge_success : R.drawable.bg_stats_badge_neutral);
+        overviewStatusHint.setText(snapshot.running
+                ? getString(R.string.stats_overview_status_running_hint, snapshot.formatUptime(), snapshot.webSocketPort, snapshot.httpPort)
+                : getString(R.string.stats_overview_status_stopped_hint));
+        overviewUsersValue.setText(getString(R.string.stats_overview_users_value, snapshot.activeUsers, users.size()));
+        overviewMessagesValue.setText(getString(R.string.stats_overview_messages_value, snapshot.totalMessagesSent, snapshot.totalMessagesReceived));
+        overviewTrafficValue.setText(snapshot.running
+                ? getString(R.string.stats_overview_traffic_value,
+                snapshot.formatBytesPerSecond(snapshot.averageBytesReceivedPerSecond),
+                snapshot.formatBytesPerSecond(snapshot.averageBytesSentPerSecond))
+                : getString(R.string.stats_unavailable));
+        overviewTypingValue.setText(snapshot.typingUsers > 0 ? snapshot.typingUsersSummary : getString(R.string.stats_typing_none));
+    }
+
+    private void applyBadgeBackground(@NonNull TextView textView, int backgroundResId) {
+        int paddingStart = textView.getPaddingStart();
+        int paddingTop = textView.getPaddingTop();
+        int paddingEnd = textView.getPaddingEnd();
+        int paddingBottom = textView.getPaddingBottom();
+        textView.setBackground(ContextCompat.getDrawable(this, backgroundResId));
+        textView.setPaddingRelative(paddingStart, paddingTop, paddingEnd, paddingBottom);
     }
 
     private static final class Row {
@@ -241,7 +301,7 @@ public class ActivityWebSocketStats extends AppCompatActivity {
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
             Row row = rows.get(position);
             if (holder instanceof HeaderViewHolder) {
-                ((HeaderViewHolder) holder).bind(row.label);
+                ((HeaderViewHolder) holder).bind(row.label, row.value);
             } else if (holder instanceof StatViewHolder) {
                 ((StatViewHolder) holder).bind(row.label, row.value);
             } else if (holder instanceof UserViewHolder && row.user != null) {
@@ -260,10 +320,19 @@ public class ActivityWebSocketStats extends AppCompatActivity {
             HeaderViewHolder(@NonNull View itemView) {
                 super(itemView);
                 textView = itemView.findViewById(R.id.text_view_stat_header);
+                valueView = itemView.findViewById(R.id.text_view_stat_header_value);
             }
 
-            void bind(@Nullable String label) {
+            final TextView valueView;
+
+            void bind(@Nullable String label, @Nullable String value) {
                 textView.setText(label);
+                if (value == null || value.isEmpty()) {
+                    valueView.setVisibility(View.GONE);
+                } else {
+                    valueView.setVisibility(View.VISIBLE);
+                    valueView.setText(value);
+                }
             }
         }
 
@@ -301,6 +370,14 @@ public class ActivityWebSocketStats extends AppCompatActivity {
                 nameView.setText(user.userName);
                 onlineView.setText(user.online ? R.string.stats_user_online : R.string.stats_user_offline);
                 onlineView.setTextColor(itemView.getContext().getColor(user.online ? R.color.green_600 : R.color.slate_700));
+                int paddingStart = onlineView.getPaddingStart();
+                int paddingTop = onlineView.getPaddingTop();
+                int paddingEnd = onlineView.getPaddingEnd();
+                int paddingBottom = onlineView.getPaddingBottom();
+                onlineView.setBackground(ContextCompat.getDrawable(
+                        itemView.getContext(),
+                        user.online ? R.drawable.bg_stats_badge_success : R.drawable.bg_stats_badge_neutral));
+                onlineView.setPaddingRelative(paddingStart, paddingTop, paddingEnd, paddingBottom);
                 addressView.setText(user.address);
 
                 String stay = user.formatStayDuration(now);
@@ -309,7 +386,8 @@ public class ActivityWebSocketStats extends AppCompatActivity {
                         R.string.stats_user_summary,
                         stay,
                         user.messageCount,
-                        lastActive);
+                        lastActive,
+                        itemView.getContext().getString(user.typing ? R.string.stats_user_typing : R.string.stats_user_idle));
                 statsView.setText(text);
             }
 

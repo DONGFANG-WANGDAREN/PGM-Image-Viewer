@@ -216,6 +216,10 @@
         </activity>
 
         <activity
+            android:name=".ui.activity.ActivityReaderStats"
+            android:exported="false" />
+
+        <activity
             android:name=".ui.activity.ActivityTools"
             android:exported="false"
             android:label="@string/tools_title"

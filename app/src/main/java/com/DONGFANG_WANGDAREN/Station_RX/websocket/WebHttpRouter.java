@@ -111,7 +111,10 @@ public final class WebHttpRouter {
             return handleLogin(session, params);
         }
 
-        if (!uri.equals("/") && !uri.equals("/chat") && !isAuthenticated(session, params)) {
+        if (!uri.equals("/")
+                && !uri.equals("/chat")
+                && !uri.equals("/api/chat/upload-image")
+                && !isAuthenticated(session, params)) {
             return serveAssetFile("web/login.html", "text/html; charset=utf-8");
         }
 
@@ -166,7 +169,6 @@ public final class WebHttpRouter {
         try {
             result.put("wsAddress", wsAddress);
             result.put("httpAddress", service.getHttpAddress());
-            result.put("httpsAddress", service.getHttpsAddress());
             result.put("browserAddress", service.getBrowserAddress());
         } catch (JSONException exception) {
             AppLogger.e(TAG, "Failed to build config JSON.", exception);
@@ -178,7 +180,8 @@ public final class WebHttpRouter {
     private NanoHTTPD.Response handleWebLoginSession() {
         cleanupExpiredWebLoginSessions();
         WebLoginSession webSession = createWebLoginSession();
-        String loginUrl = service.getLoginUrl();
+        webSession.qrReady = true;
+        String loginUrl = service.getWebLoginUrl();
         JSONObject result = new JSONObject();
         try {
             result.put("sessionId", webSession.sessionId);
@@ -316,6 +319,49 @@ public final class WebHttpRouter {
         return false;
     }
 
+    @Nullable
+    public static PendingWebLoginInfo getLatestPendingWebLoginInfo() {
+        cleanupExpiredStaticWebLoginSessions();
+        WebLoginSession latestSession = null;
+        for (WebLoginSession session : WEB_LOGIN_SESSIONS.values()) {
+            if (!session.qrReady || session.authenticated) {
+                continue;
+            }
+            if (latestSession == null || session.createdAt > latestSession.createdAt) {
+                latestSession = session;
+            }
+        }
+        if (latestSession == null) {
+            return null;
+        }
+        return new PendingWebLoginInfo(latestSession.sessionId, latestSession.token);
+    }
+
+    @Nullable
+    public static String confirmPendingWebLogin(@Nullable String sessionId, @Nullable String token) {
+        cleanupExpiredStaticWebLoginSessions();
+        if (sessionId == null || token == null) {
+            return null;
+        }
+        WebLoginSession session = WEB_LOGIN_SESSIONS.get(sessionId);
+        if (session == null || session.authenticated || !session.qrReady || !token.equals(session.token)) {
+            return null;
+        }
+        session.authenticated = true;
+        return session.authToken;
+    }
+
+    private static void cleanupExpiredStaticWebLoginSessions() {
+        long now = System.currentTimeMillis();
+        Iterator<Map.Entry<String, WebLoginSession>> iterator = WEB_LOGIN_SESSIONS.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, WebLoginSession> entry = iterator.next();
+            if (now - entry.getValue().createdAt > WEB_LOGIN_SESSION_MAX_AGE_MS) {
+                iterator.remove();
+            }
+        }
+    }
+
     private void cleanupExpiredWebLoginSessions() {
         long now = System.currentTimeMillis();
         Iterator<Map.Entry<String, WebLoginSession>> iterator = WEB_LOGIN_SESSIONS.entrySet().iterator();
@@ -358,6 +404,7 @@ public final class WebHttpRouter {
         final String authToken;
         final long createdAt;
         volatile boolean authenticated;
+        volatile boolean qrReady;
 
         WebLoginSession(@NonNull String sessionId, @NonNull String token, @NonNull String authToken) {
             this.sessionId = sessionId;
@@ -365,6 +412,19 @@ public final class WebHttpRouter {
             this.authToken = authToken;
             this.createdAt = System.currentTimeMillis();
             this.authenticated = false;
+            this.qrReady = false;
+        }
+    }
+
+    public static final class PendingWebLoginInfo {
+        @NonNull
+        public final String sessionId;
+        @NonNull
+        public final String token;
+
+        PendingWebLoginInfo(@NonNull String sessionId, @NonNull String token) {
+            this.sessionId = sessionId;
+            this.token = token;
         }
     }
 
@@ -985,7 +1045,6 @@ public final class WebHttpRouter {
             network.put("localIp", ip != null ? ip : "");
             network.put("webSocketPort", service.getWebSocketPort());
             network.put("httpPort", service.getHttpPort());
-            network.put("httpsPort", service.getHttpsPort());
             network.put("wifiConnected", NetworkInfoHelper.isWifiConnected(context));
             network.put("wifiLinkSpeedMbps", NetworkInfoHelper.getWifiLinkSpeedMbps(context));
             network.put("wifiSignalDbm", NetworkInfoHelper.getWifiSignalDbm(context));

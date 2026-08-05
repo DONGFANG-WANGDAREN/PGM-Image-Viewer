@@ -4,6 +4,7 @@ use axum::{
 };
 use chrono::Local;
 use futures::{sink::SinkExt, stream::StreamExt};
+use serde_json::Value;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -21,10 +22,19 @@ pub(crate) async fn ws_handler(
         .get("name")
         .cloned()
         .unwrap_or_else(|| format!("User-{}", &Uuid::new_v4().to_string()[..4]));
-    ws.on_upgrade(move |socket| handle_socket(socket, username, state))
+    let monitor = params
+        .get("monitor")
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    ws.on_upgrade(move |socket| handle_socket(socket, username, monitor, state))
 }
 
-async fn handle_socket(socket: axum::extract::ws::WebSocket, username: String, state: AppState) {
+async fn handle_socket(
+    socket: axum::extract::ws::WebSocket,
+    username: String,
+    monitor: bool,
+    state: AppState,
+) {
     let (mut sender, mut receiver) = socket.split();
     let Some(broadcast_tx) = message_broadcaster() else {
         return;
@@ -34,7 +44,7 @@ async fn handle_socket(socket: axum::extract::ws::WebSocket, username: String, s
     let client_id = Uuid::new_v4().to_string();
     let connected_at = Local::now().timestamp_millis();
 
-    {
+    if !monitor {
         let mut chat = state.chat.lock().await;
         chat.clients.insert(
             client_id.clone(),
@@ -48,8 +58,10 @@ async fn handle_socket(socket: axum::extract::ws::WebSocket, username: String, s
         chat.peak_active_users = chat.peak_active_users.max(chat.clients.len());
     }
 
-    let join_msg = build_system_message(&format!("{} 进入聊天室", username));
-    broadcast_message(&state, join_msg).await;
+    if !monitor {
+        let join_msg = build_system_message(&format!("{} 进入聊天室", username));
+        broadcast_message(&state, join_msg).await;
+    }
 
     let send_task = tokio::spawn(async move {
         while let Ok(msg) = broadcast_rx.recv().await {
@@ -72,6 +84,9 @@ async fn handle_socket(socket: axum::extract::ws::WebSocket, username: String, s
             while let Some(Ok(msg)) = receiver.next().await {
                 match msg {
                     axum::extract::ws::Message::Text(text) => {
+                        if monitor || is_typing_event(&text) {
+                            continue;
+                        }
                         let mut chat = state.chat.lock().await;
                         chat.total_messages_received += 1;
                         if let Some(client) = chat.clients.get_mut(&client_id) {
@@ -94,11 +109,25 @@ async fn handle_socket(socket: axum::extract::ws::WebSocket, username: String, s
         _ = recv_task => {},
     }
 
-    {
+    if !monitor {
         let mut chat = state.chat.lock().await;
         chat.clients.remove(&client_id);
     }
 
-    let leave_msg = build_system_message(&format!("{} 离开聊天室", username));
-    broadcast_message(&state, leave_msg).await;
+    if !monitor {
+        let leave_msg = build_system_message(&format!("{} 离开聊天室", username));
+        broadcast_message(&state, leave_msg).await;
+    }
+}
+
+fn is_typing_event(message: &str) -> bool {
+    let trimmed = message.trim();
+    if !trimmed.starts_with('{') || !trimmed.ends_with('}') {
+        return false;
+    }
+    serde_json::from_str::<Value>(trimmed)
+        .ok()
+        .and_then(|value| value.get("clientEvent").and_then(Value::as_str).map(str::to_string))
+        .map(|event| event == "typing")
+        .unwrap_or(false)
 }

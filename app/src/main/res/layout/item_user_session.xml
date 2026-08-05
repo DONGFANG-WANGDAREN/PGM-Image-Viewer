@@ -3,7 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:layout_marginBottom="10dp"
     android:background="@drawable/bg_card_white"
+    android:elevation="1dp"
     android:orientation="vertical"
     android:padding="16dp">
 
@@ -25,8 +27,14 @@
             android:id="@+id/text_view_user_online"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:background="@drawable/bg_stats_badge_success"
+            android:paddingStart="10dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="4dp"
             android:textColor="@color/green_600"
-            android:textSize="13sp"
+            android:textSize="12sp"
+            android:textStyle="bold"
             tools:text="Online" />
 
     </LinearLayout>
@@ -44,7 +52,7 @@
         android:id="@+id/text_view_user_stats"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="8dp"
         android:textColor="@color/slate_700"
         android:textSize="13sp"
         tools:text="Stay 00:05:32 · 12 messages · Last active 00:00:12 ago" />

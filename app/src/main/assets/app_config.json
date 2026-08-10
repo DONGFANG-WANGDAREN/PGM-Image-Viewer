@@ -2,30 +2,16 @@
   "storage": {
     "appFolderName": "Station RX",
     "logsFolder": "Log",
-    "historyFolder": "History",
-    "webSocketChatFolder": "WebSocket/Chat",
-    "webSocketChatImagesFolder": "Images"
+    "historyFolder": "History"
   },
   "naming": {
     "logDayFolderFormat": "yyyy-MM-dd",
     "logFileNameFormat": "'Log'_HH-mm_yyyy-MM-dd",
     "logFileExtension": ".txt",
-    "historyFileName": "History.json",
-    "chatDayFolderFormat": "yyyy-MM-dd",
-    "chatFileNameFormat": "'Chat'_HH-mm-ss_yyyy-MM-dd",
-    "chatFileExtension": ".txt",
-    "chatLogTimeFormat": "HH:mm:ss",
-    "chatImageFileNameFormat": "'Chat'_yyyy-MM-dd_HH-mm-ss",
-    "chatImageFileDefaultExtension": ".jpg"
+    "historyFileName": "History.json"
   },
   "websocket": {
-    "port": 8080,
-    "httpPort": 8081,
-    "senderApp": "Station RX",
-    "senderSystem": "System",
-    "messageTypeText": "text",
-    "messageTypeImage": "image",
-    "imageUrlPrefix": "/images/"
+    "httpPort": 8081
   },
   "viewer": {
     "textPreviewInitialCharacters": 24576,

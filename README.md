@@ -18,7 +18,7 @@ It can open files from the in-app picker and also receive system `VIEW` intents 
 - Prompts before opening APK files in the system installer.
 - Saves recent files so they can be reopened quickly from the history panel.
 - Opens large files on a background thread to keep the UI responsive.
-- Provides a built-in **WebSocket chat room** that can be opened from the tools menu.
+- Provides a built-in **file transfer** tool for LAN browser access.
 
 ## Supported Formats
 
@@ -51,25 +51,12 @@ It can open files from the in-app picker and also receive system `VIEW` intents 
 - Adjusts text size for easier reading.
 - Truncates oversized text, DOCX, and Excel previews to keep the viewer responsive.
 
-## Tools & WebSocket Chat Room
+## Tools & File Transfer
 
 The tools menu is opened from the main screen and currently contains:
 
-- **WebSocket Dashboard** — lists the running local WebSocket service and opens a detailed statistics page.
-- **Chat Room** — starts the Java local chat service for anonymous text and image messaging.
+- **WebSocket Dashboard** — shows the reader card and the current file transfer service state.
 - **File Transfer** — opens the LAN web login flow and browser file manager.
-- **Chat Room Rust** — starts the Rust-based chat service that mirrors the core Java chat room behavior.
-
-In the chat room:
-
-- The app runs a WebSocket server (default port `8080`) and an HTTP server (default port `8081`).
-- Other apps or browsers on the same network can connect to `ws://<device-ip>:8080`.
-- Browsers can open `http://<device-ip>:8081/chat` to view and send anonymous text and image messages.
-- Messages are broadcast to all connected clients, with sender names shown.
-- The app can send text and images selected from the gallery.
-- System messages notify when users enter or leave the chat room.
-- The service runs in the foreground with a persistent notification. It keeps running after leaving the chat page or sending the app to the background, and only stops when the user presses **Stop** in the notification or the in-app **Stop Server** button, or when the app process is killed.
-- The notification content is updated with the latest incoming message preview, so users can see new activity at a glance.
 
 ### File Transfer & Web Login
 
@@ -86,63 +73,37 @@ From the web interface you can:
 - Download files or view text and image files online.
 - Upload files from the browser to the current folder.
 
-The browser session is authenticated with a randomly generated token stored in a cookie. Each QR code is single-use and expires after a few minutes if not scanned.
+The browser session is authenticated with a randomly generated token stored in a cookie. Each QR code is single-use and expires after a few minutes if not scanned. After the web page is opened, the browser reports client metadata back to the app, including IP, browser name, platform, language, timezone, screen size, current page, and last seen time.
 
 ### WebSocket Dashboard
 
-The dashboard shows the running local service and, when opened, displays real-time statistics grouped into:
+The dashboard shows two cards:
 
-- **Service** — running status, uptime, messages received/sent, total/active/peak users, WebSocket/HTTP ports
-- **Network** — WiFi connection status, link speed, signal strength, bytes received/sent
-- **Device** — estimated app CPU usage
-- **Users** — per-user list showing online/offline status, stay duration, message count, and last active time
+- **Reader** — current file name, file path, open mode, file size, and memory usage.
+- **File Transfer** — current file transfer URL and the latest browser-side state.
 
-> Ports, sender names, and message types can be changed in [`app_config.json`](app/src/main/assets/app_config.json).
+When the file transfer card is tapped, it opens a dedicated detail page instead of the scan-login dialog.
 
-### Rust Server (Experimental)
+### File Transfer Detail Page
 
-The **Chat Room Rust** service is an experimental Axum-based server embedded in the app. It runs on the Java HTTP port plus `1000` (default `9081`) and reuses the same web chat assets as the Java chat room.
+The file transfer detail page is used to inspect the currently connected or pending computer session. It shows:
 
-What currently works:
-
-- WebSocket chat at `/ws?name=...` with text messages and enter/leave system messages.
-- Web chat page at `/chat` with anonymous text and image sending.
-- Mobile-side text sending and image sending from the Rust chat screen.
-- Live chat log display in the Rust chat screen through an internal monitor connection.
-- Chat logs written under `WebSocket/Chat/yyyy-MM-dd/Chat_HH-mm-ss_yyyy-MM-dd.txt`.
-- File manager page (`/files`) with file listing, download, preview, and chunked upload.
-- Device information page via `/api/device`.
-
-Known issues and limitations (not being changed at the moment):
-
-- **Authentication**: the Rust server does not enforce the token/cookie login used by the Java file manager. The web file manager is publicly accessible while the Rust server is running.
-- **WebSocket port**: the Rust WebSocket is served on the Rust HTTP port (`/ws`), not on a separate dedicated WebSocket port.
-- **Image uploads**: the whole image is loaded into memory before being saved.
-- **QR web login**: the Rust server does not support the scan-to-login flow.
-
-## Chat Logs
-
-Every time the chat room is opened, a new chat log file is created at:
-
-```
-/Station RX/WebSocket/Chat/yyyy-MM-dd/Chat_HH-mm-ss_yyyy-MM-dd.txt
-```
-
-Sent images are stored separately at:
-
-```
-/Station RX/WebSocket/Chat/Images/
-```
-
-Logs are written in plain text and are not loaded back into the app.
+- whether the HTTP file transfer service is running
+- the current web login URL
+- the current connection state
+- the latest computer summary (`browser / platform`)
+- browser, platform, language, timezone, and screen resolution
+- remote IP address
+- current browser page (`web-login` or `files`)
+- session created time, login confirmed time, and last active time
 
 ## Configuration
 
 Folder names, file naming formats, and many runtime constants are centralized in [`app_config.json`](app/src/main/assets/app_config.json). The file is loaded when the app starts and covers:
 
-- Storage folder names (`Station RX`, `Log`, `History`, `WebSocket/Chat`, `Images`).
-- Log, history, and chat file naming formats.
-- WebSocket and HTTP ports, sender names, message types, and image URL prefix.
+- Storage folder names (`Station RX`, `Log`, `History`).
+- Log and history file naming formats.
+- HTTP port for the LAN file transfer service.
 - Text preview limits, history record limits, and text size range.
 
 When editing naming formats, any non-date literal (for example `Log_` or `Chat_`) must be wrapped in single quotes for `SimpleDateFormat`:

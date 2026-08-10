@@ -1,10 +1,5 @@
 package com.DONGFANG_WANGDAREN.Station_RX.websocket;
 
-
-import com.DONGFANG_WANGDAREN.Station_RX.app.AppConfig;
-import com.DONGFANG_WANGDAREN.Station_RX.app.AppLogger;
-import com.DONGFANG_WANGDAREN.Station_RX.storage.AppStoragePaths;
-import com.DONGFANG_WANGDAREN.Station_RX.util.QRCodeHelper;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -19,11 +14,14 @@ import android.view.WindowManager;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.DONGFANG_WANGDAREN.Station_RX.app.AppLogger;
+import com.DONGFANG_WANGDAREN.Station_RX.storage.AppStoragePaths;
+import com.DONGFANG_WANGDAREN.Station_RX.util.QRCodeHelper;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -36,17 +34,17 @@ import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
-import java.util.Iterator;
-import java.util.concurrent.ConcurrentHashMap;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import fi.iki.elonen.NanoHTTPD;
 
@@ -56,13 +54,13 @@ public final class WebHttpRouter {
     private static final String COOKIE_NAME = "rrx_token";
     private static final String WEB_AUTH_COOKIE_NAME = "rrx_web_auth";
     private static final long WEB_LOGIN_SESSION_MAX_AGE_MS = 10 * 60 * 1000;
+    private static final long WEB_LOGIN_AUTH_SESSION_MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000;
     private static final long UPLOAD_SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final ConcurrentHashMap<String, WebLoginSession> WEB_LOGIN_SESSIONS = new ConcurrentHashMap<>();
 
     private final ConcurrentHashMap<String, UploadSession> uploadSessions = new ConcurrentHashMap<>();
-
     private final WebSocketService service;
     private final Context context;
 
@@ -74,54 +72,41 @@ public final class WebHttpRouter {
     @NonNull
     public NanoHTTPD.Response route(@NonNull NanoHTTPD.IHTTPSession session) {
         String uri = session.getUri();
-        if (uri == null) {
+        if (uri == null || uri.isEmpty()) {
             uri = "/";
         }
         Map<String, String> params = session.getParms();
 
-        if (uri.startsWith(AppConfig.get().getImageUrlPrefix())) {
-            return serveChatImage(uri);
+        switch (uri) {
+            case "/web-login":
+                return serveAssetFile("web/web-login.html", "text/html; charset=utf-8");
+            case "/login":
+                return handleLogin(params);
+            case "/api/qr.png":
+                return serveQrCode(params);
+            case "/api/confirm":
+                return handleConfirm(params);
+            case "/api/session-status":
+                return handleSessionStatus(params);
+            case "/api/web-login-session":
+                return handleWebLoginSession(session);
+            case "/api/web-login-client-info":
+                return handleWebLoginClientInfo(session, params);
+            case "/api/web-login-heartbeat":
+                return handleWebLoginHeartbeat(params);
+            default:
+                break;
         }
 
-        if (uri.equals("/web-login")) {
-            return serveAssetFile("web/web-login.html", "text/html; charset=utf-8");
-        }
-
-        if (uri.equals("/api/qr.png")) {
-            return serveQrCode(params);
-        }
-
-        if (uri.equals("/api/confirm")) {
-            return handleConfirm(params);
-        }
-
-        if (uri.equals("/api/session-status")) {
-            return handleSessionStatus(session, params);
-        }
-
-        if (uri.equals("/api/config")) {
-            return handleConfig();
-        }
-
-        if (uri.equals("/api/web-login-session")) {
-            return handleWebLoginSession();
-        }
-
-        if (uri.equals("/login")) {
-            return handleLogin(session, params);
-        }
-
-        if (!uri.equals("/")
-                && !uri.equals("/chat")
-                && !uri.equals("/api/chat/upload-image")
-                && !isAuthenticated(session, params)) {
+        if (!isAuthenticated(session, params)) {
+            if (uri.equals("/") || uri.equals("/login")) {
+                return serveAssetFile("web/login.html", "text/html; charset=utf-8");
+            }
             return serveAssetFile("web/login.html", "text/html; charset=utf-8");
         }
 
         switch (uri) {
             case "/":
-            case "/chat":
-                return serveAssetFile("web/index.html", "text/html; charset=utf-8");
             case "/files":
                 return serveAssetFile("web/files.html", "text/html; charset=utf-8");
             case "/api/files":
@@ -140,15 +125,13 @@ public final class WebHttpRouter {
                 return handleUploadChunk(session);
             case "/api/upload-finish":
                 return handleUploadFinish(session);
-            case "/api/chat/upload-image":
-                return handleChatImageUpload(session);
             default:
                 return newFixedLengthResponse(NanoHTTPD.Response.Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "Not found");
         }
     }
 
     @NonNull
-    private NanoHTTPD.Response handleLogin(@NonNull NanoHTTPD.IHTTPSession session, @NonNull Map<String, String> params) {
+    private NanoHTTPD.Response handleLogin(@NonNull Map<String, String> params) {
         String token = params.get("token");
         if (token != null && token.equals(service.getHttpAuthToken())) {
             NanoHTTPD.Response response = newFixedLengthResponse(NanoHTTPD.Response.Status.REDIRECT, NanoHTTPD.MIME_PLAINTEXT, "");
@@ -160,33 +143,16 @@ public final class WebHttpRouter {
     }
 
     @NonNull
-    private NanoHTTPD.Response handleConfig() {
-        String wsAddress = service.getServerAddress();
-        if (wsAddress == null) {
-            wsAddress = "ws://" + LanServerHelper.getDisplayHost() + ":" + service.getWebSocketPort();
-        }
-        JSONObject result = new JSONObject();
-        try {
-            result.put("wsAddress", wsAddress);
-            result.put("httpAddress", service.getHttpAddress());
-            result.put("browserAddress", service.getBrowserAddress());
-        } catch (JSONException exception) {
-            AppLogger.e(TAG, "Failed to build config JSON.", exception);
-        }
-        return jsonResponse(result, NanoHTTPD.Response.Status.OK);
-    }
-
-    @NonNull
-    private NanoHTTPD.Response handleWebLoginSession() {
+    private NanoHTTPD.Response handleWebLoginSession(@NonNull NanoHTTPD.IHTTPSession session) {
         cleanupExpiredWebLoginSessions();
         WebLoginSession webSession = createWebLoginSession();
         webSession.qrReady = true;
-        String loginUrl = service.getWebLoginUrl();
+        updateWebLoginSessionClientInfo(webSession, session, null);
         JSONObject result = new JSONObject();
         try {
             result.put("sessionId", webSession.sessionId);
             result.put("token", webSession.token);
-            result.put("loginUrl", loginUrl != null ? loginUrl : "");
+            result.put("loginUrl", service.getWebLoginUrl() != null ? service.getWebLoginUrl() : "");
         } catch (JSONException exception) {
             AppLogger.e(TAG, "Failed to build web login session JSON.", exception);
         }
@@ -194,53 +160,25 @@ public final class WebHttpRouter {
     }
 
     @NonNull
-    private NanoHTTPD.Response serveAssetFile(@NonNull String assetPath, @NonNull String mimeType) {
-        try {
-            InputStream stream = context.getAssets().open(assetPath);
-            return NanoHTTPD.newChunkedResponse(NanoHTTPD.Response.Status.OK, mimeType, stream);
-        } catch (Exception exception) {
-            AppLogger.e(TAG, "Failed to open asset: " + assetPath, exception);
-            return newFixedLengthResponse(NanoHTTPD.Response.Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "Not found.");
-        }
-    }
-
-    @NonNull
-    private NanoHTTPD.Response serveQrCode(@NonNull Map<String, String> params) {
-        String data = params.get("data");
-        if (data == null || data.isEmpty()) {
-            return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, NanoHTTPD.MIME_PLAINTEXT, "Missing data.");
-        }
-        Bitmap bitmap = QRCodeHelper.generateQrCode(data, 512);
-        if (bitmap == null) {
-            return newFixedLengthResponse(NanoHTTPD.Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, "Failed to generate QR code.");
-        }
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream);
-        byte[] bytes = outputStream.toByteArray();
-        return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "image/png", new ByteArrayInputStream(bytes), bytes.length);
-    }
-
-    @NonNull
     private NanoHTTPD.Response handleConfirm(@NonNull Map<String, String> params) {
-        String sessionId = params.get("session");
-        String token = params.get("token");
-        String authToken = confirmWebLoginSession(sessionId, token);
+        String authToken = confirmWebLoginSession(params.get("session"), params.get("token"));
         JSONObject result = new JSONObject();
         try {
             result.put("success", authToken != null);
         } catch (JSONException exception) {
             AppLogger.e(TAG, "Failed to build confirm response JSON.", exception);
         }
-        if (authToken != null) {
-            return jsonResponse(result, NanoHTTPD.Response.Status.OK);
-        }
-        return jsonResponse(result, NanoHTTPD.Response.Status.UNAUTHORIZED);
+        return jsonResponse(result, authToken != null ? NanoHTTPD.Response.Status.OK : NanoHTTPD.Response.Status.UNAUTHORIZED);
     }
 
     @NonNull
-    private NanoHTTPD.Response handleSessionStatus(@NonNull NanoHTTPD.IHTTPSession session, @NonNull Map<String, String> params) {
+    private NanoHTTPD.Response handleSessionStatus(@NonNull Map<String, String> params) {
         String sessionId = params.get("session");
         WebLoginSession webSession = sessionId != null ? WEB_LOGIN_SESSIONS.get(sessionId) : null;
+        if (webSession != null) {
+            webSession.lastSeenAt = System.currentTimeMillis();
+            webSession.currentPage = "web-login";
+        }
         boolean authenticated = webSession != null && webSession.authenticated;
         JSONObject result = new JSONObject();
         try {
@@ -255,23 +193,56 @@ public final class WebHttpRouter {
         return response;
     }
 
+    @NonNull
+    private NanoHTTPD.Response handleWebLoginClientInfo(@NonNull NanoHTTPD.IHTTPSession session, @NonNull Map<String, String> params) {
+        String sessionId = params.get("session");
+        WebLoginSession webSession = sessionId != null ? WEB_LOGIN_SESSIONS.get(sessionId) : null;
+        if (webSession == null) {
+            return jsonErrorResponse("Session not found.");
+        }
+        updateWebLoginSessionClientInfo(webSession, session, params);
+        JSONObject result = new JSONObject();
+        try {
+            result.put("success", true);
+        } catch (JSONException exception) {
+            AppLogger.e(TAG, "Failed to build web login client info response JSON.", exception);
+        }
+        return jsonResponse(result, NanoHTTPD.Response.Status.OK);
+    }
+
+    @NonNull
+    private NanoHTTPD.Response handleWebLoginHeartbeat(@NonNull Map<String, String> params) {
+        String sessionId = params.get("session");
+        WebLoginSession webSession = sessionId != null ? WEB_LOGIN_SESSIONS.get(sessionId) : null;
+        if (webSession == null) {
+            return jsonErrorResponse("Session not found.");
+        }
+        webSession.lastSeenAt = System.currentTimeMillis();
+        String page = params.get("page");
+        if (page != null && !page.isEmpty()) {
+            webSession.currentPage = page;
+        }
+        JSONObject result = new JSONObject();
+        try {
+            result.put("success", true);
+        } catch (JSONException exception) {
+            AppLogger.e(TAG, "Failed to build web login heartbeat response JSON.", exception);
+        }
+        return jsonResponse(result, NanoHTTPD.Response.Status.OK);
+    }
+
     private boolean isAuthenticated(@NonNull NanoHTTPD.IHTTPSession session, @NonNull Map<String, String> params) {
         String token = service.getHttpAuthToken();
-        if (!token.isEmpty()) {
-            String queryToken = params.get("token");
-            if (token.equals(queryToken)) {
-                return true;
-            }
-            String existingToken = getCookieValue(session, COOKIE_NAME);
-            if (token.equals(existingToken)) {
-                return true;
-            }
-        }
-        String webAuthToken = getCookieValue(session, WEB_AUTH_COOKIE_NAME);
-        if (webAuthToken != null && isWebLoginSessionAuthenticated(webAuthToken)) {
+        String queryToken = params.get("token");
+        if (!token.isEmpty() && token.equals(queryToken)) {
             return true;
         }
-        return false;
+        String cookieToken = getCookieValue(session, COOKIE_NAME);
+        if (!token.isEmpty() && token.equals(cookieToken)) {
+            return true;
+        }
+        String webAuthToken = getCookieValue(session, WEB_AUTH_COOKIE_NAME);
+        return webAuthToken != null && isWebLoginSessionAuthenticated(webAuthToken);
     }
 
     @Nullable
@@ -307,6 +278,8 @@ public final class WebHttpRouter {
             return null;
         }
         session.authenticated = true;
+        session.authenticatedAt = System.currentTimeMillis();
+        session.lastSeenAt = session.authenticatedAt;
         return session.authToken;
     }
 
@@ -331,10 +304,7 @@ public final class WebHttpRouter {
                 latestSession = session;
             }
         }
-        if (latestSession == null) {
-            return null;
-        }
-        return new PendingWebLoginInfo(latestSession.sessionId, latestSession.token);
+        return latestSession == null ? null : new PendingWebLoginInfo(latestSession.sessionId, latestSession.token);
     }
 
     @Nullable
@@ -348,6 +318,8 @@ public final class WebHttpRouter {
             return null;
         }
         session.authenticated = true;
+        session.authenticatedAt = System.currentTimeMillis();
+        session.lastSeenAt = session.authenticatedAt;
         return session.authToken;
     }
 
@@ -355,22 +327,150 @@ public final class WebHttpRouter {
         long now = System.currentTimeMillis();
         Iterator<Map.Entry<String, WebLoginSession>> iterator = WEB_LOGIN_SESSIONS.entrySet().iterator();
         while (iterator.hasNext()) {
-            Map.Entry<String, WebLoginSession> entry = iterator.next();
-            if (now - entry.getValue().createdAt > WEB_LOGIN_SESSION_MAX_AGE_MS) {
+            WebLoginSession session = iterator.next().getValue();
+            long ttl = session.authenticated ? WEB_LOGIN_AUTH_SESSION_MAX_AGE_MS : WEB_LOGIN_SESSION_MAX_AGE_MS;
+            long baseTime = session.lastSeenAt > 0 ? session.lastSeenAt : session.createdAt;
+            if (now - baseTime > ttl) {
                 iterator.remove();
             }
         }
     }
 
     private void cleanupExpiredWebLoginSessions() {
-        long now = System.currentTimeMillis();
-        Iterator<Map.Entry<String, WebLoginSession>> iterator = WEB_LOGIN_SESSIONS.entrySet().iterator();
-        while (iterator.hasNext()) {
-            WebLoginSession session = iterator.next().getValue();
-            if (now - session.createdAt > WEB_LOGIN_SESSION_MAX_AGE_MS) {
-                iterator.remove();
+        cleanupExpiredStaticWebLoginSessions();
+    }
+
+    private void updateWebLoginSessionClientInfo(
+            @NonNull WebLoginSession webSession,
+            @NonNull NanoHTTPD.IHTTPSession session,
+            @Nullable Map<String, String> params
+    ) {
+        webSession.lastSeenAt = System.currentTimeMillis();
+        if (params != null) {
+            String browserName = firstNonEmpty(params.get("browser"), webSession.browserName);
+            String platform = firstNonEmpty(params.get("platform"), webSession.platform);
+            String language = firstNonEmpty(params.get("language"), webSession.language);
+            String timezone = firstNonEmpty(params.get("timezone"), webSession.timezone);
+            String currentPage = firstNonEmpty(params.get("page"), webSession.currentPage);
+            String userAgent = firstNonEmpty(params.get("userAgent"), webSession.userAgent);
+            if (browserName != null) {
+                webSession.browserName = browserName;
+            }
+            if (platform != null) {
+                webSession.platform = platform;
+            }
+            if (language != null) {
+                webSession.language = language;
+            }
+            if (timezone != null) {
+                webSession.timezone = timezone;
+            }
+            if (currentPage != null) {
+                webSession.currentPage = currentPage;
+            }
+            webSession.screenWidth = parseIntSafely(params.get("screenWidth"), webSession.screenWidth);
+            webSession.screenHeight = parseIntSafely(params.get("screenHeight"), webSession.screenHeight);
+            if (userAgent != null) {
+                webSession.userAgent = userAgent;
             }
         }
+        String headerUserAgent = firstNonEmpty(session.getHeaders().get("user-agent"), webSession.userAgent);
+        if (headerUserAgent != null) {
+            webSession.userAgent = headerUserAgent;
+        }
+        if (webSession.browserName.isEmpty()) {
+            webSession.browserName = detectBrowserName(webSession.userAgent);
+        }
+        String remoteAddress = extractRemoteAddress(session);
+        if (remoteAddress != null && !remoteAddress.isEmpty()) {
+            webSession.remoteAddress = remoteAddress;
+        }
+    }
+
+    @Nullable
+    private static String firstNonEmpty(@Nullable String... candidates) {
+        if (candidates == null) {
+            return null;
+        }
+        for (String candidate : candidates) {
+            if (candidate != null && !candidate.trim().isEmpty()) {
+                return candidate.trim();
+            }
+        }
+        return null;
+    }
+
+    private static int parseIntSafely(@Nullable String value, int fallback) {
+        if (value == null || value.trim().isEmpty()) {
+            return fallback;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
+    @Nullable
+    private static String extractRemoteAddress(@NonNull NanoHTTPD.IHTTPSession session) {
+        String forwarded = session.getHeaders().get("x-forwarded-for");
+        if (forwarded != null && !forwarded.trim().isEmpty()) {
+            return forwarded.split(",")[0].trim();
+        }
+        try {
+            Object value = session.getClass().getMethod("getRemoteIpAddress").invoke(session);
+            if (value instanceof String && !((String) value).trim().isEmpty()) {
+                return ((String) value).trim();
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    @NonNull
+    private static String detectBrowserName(@Nullable String userAgent) {
+        if (userAgent == null || userAgent.isEmpty()) {
+            return "";
+        }
+        String lower = userAgent.toLowerCase(Locale.US);
+        if (lower.contains("edg/")) {
+            return "Microsoft Edge";
+        }
+        if (lower.contains("chrome/") && !lower.contains("edg/")) {
+            return "Google Chrome";
+        }
+        if (lower.contains("firefox/")) {
+            return "Mozilla Firefox";
+        }
+        if (lower.contains("safari/") && !lower.contains("chrome/")) {
+            return "Safari";
+        }
+        if (lower.contains("opr/") || lower.contains("opera/")) {
+            return "Opera";
+        }
+        return "Unknown Browser";
+    }
+
+    @Nullable
+    public static FileTransferClientSnapshot getLatestFileTransferClientSnapshot() {
+        cleanupExpiredStaticWebLoginSessions();
+        WebLoginSession latestSession = null;
+        for (WebLoginSession session : WEB_LOGIN_SESSIONS.values()) {
+            if (latestSession == null) {
+                latestSession = session;
+                continue;
+            }
+            if (session.authenticated && !latestSession.authenticated) {
+                latestSession = session;
+                continue;
+            }
+            long currentRank = session.lastSeenAt > 0 ? session.lastSeenAt : session.createdAt;
+            long bestRank = latestSession.lastSeenAt > 0 ? latestSession.lastSeenAt : latestSession.createdAt;
+            if (session.authenticated == latestSession.authenticated && currentRank > bestRank) {
+                latestSession = session;
+            }
+        }
+        return latestSession == null ? null : new FileTransferClientSnapshot(latestSession);
     }
 
     @NonNull
@@ -383,120 +483,43 @@ public final class WebHttpRouter {
         return builder.toString();
     }
 
-    private void cleanupExpiredUploadSessions() {
-        long now = System.currentTimeMillis();
-        Iterator<Map.Entry<String, UploadSession>> iterator = uploadSessions.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<String, UploadSession> entry = iterator.next();
-            if (now - entry.getValue().lastActiveAt > UPLOAD_SESSION_MAX_AGE_MS) {
-                entry.getValue().tempFile.delete();
-                iterator.remove();
-            }
-        }
-    }
-
-    private static final class WebLoginSession {
-        @NonNull
-        final String sessionId;
-        @NonNull
-        final String token;
-        @NonNull
-        final String authToken;
-        final long createdAt;
-        volatile boolean authenticated;
-        volatile boolean qrReady;
-
-        WebLoginSession(@NonNull String sessionId, @NonNull String token, @NonNull String authToken) {
-            this.sessionId = sessionId;
-            this.token = token;
-            this.authToken = authToken;
-            this.createdAt = System.currentTimeMillis();
-            this.authenticated = false;
-            this.qrReady = false;
-        }
-    }
-
-    public static final class PendingWebLoginInfo {
-        @NonNull
-        public final String sessionId;
-        @NonNull
-        public final String token;
-
-        PendingWebLoginInfo(@NonNull String sessionId, @NonNull String token) {
-            this.sessionId = sessionId;
-            this.token = token;
-        }
-    }
-
-    private static final class UploadSession {
-        @NonNull
-        final String uploadId;
-        @NonNull
-        final File targetDirectory;
-        @NonNull
-        final String fileName;
-        @NonNull
-        final File tempFile;
-        volatile long lastActiveAt;
-        int receivedChunks;
-
-        UploadSession(@NonNull String uploadId, @NonNull File targetDirectory, @NonNull String fileName, @NonNull File tempFile, long lastActiveAt) {
-            this.uploadId = uploadId;
-            this.targetDirectory = targetDirectory;
-            this.fileName = fileName;
-            this.tempFile = tempFile;
-            this.lastActiveAt = lastActiveAt;
-            this.receivedChunks = 0;
-        }
-    }
-
-    private static final class RandomAccessFileInputStream extends InputStream {
-        @NonNull
-        private final RandomAccessFile randomAccessFile;
-        private long remaining;
-
-        RandomAccessFileInputStream(@NonNull RandomAccessFile randomAccessFile, long length) {
-            this.randomAccessFile = randomAccessFile;
-            this.remaining = length;
-        }
-
-        @Override
-        public int read() throws IOException {
-            if (remaining <= 0) {
-                return -1;
-            }
-            remaining--;
-            return randomAccessFile.read();
-        }
-
-        @Override
-        public int read(@NonNull byte[] buffer, int offset, int length) throws IOException {
-            if (remaining <= 0) {
-                return -1;
-            }
-            int toRead = (int) Math.min(length, remaining);
-            int read = randomAccessFile.read(buffer, offset, toRead);
-            if (read > 0) {
-                remaining -= read;
-            }
-            return read;
-        }
-
-        @Override
-        public void close() throws IOException {
-            randomAccessFile.close();
+    @NonNull
+    private NanoHTTPD.Response serveAssetFile(@NonNull String assetPath, @NonNull String mimeType) {
+        try {
+            InputStream stream = context.getAssets().open(assetPath);
+            return NanoHTTPD.newChunkedResponse(NanoHTTPD.Response.Status.OK, mimeType, stream);
+        } catch (Exception exception) {
+            AppLogger.e(TAG, "Failed to open asset: " + assetPath, exception);
+            return newFixedLengthResponse(NanoHTTPD.Response.Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "Not found.");
         }
     }
 
     @NonNull
-    private NanoHTTPD.Response serveChatImage(@NonNull String uri) {
-        String prefix = AppConfig.get().getImageUrlPrefix();
-        String fileName = uri.substring(prefix.length());
-        if (fileName.isEmpty() || fileName.contains("..") || fileName.contains("/")) {
-            return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, NanoHTTPD.MIME_PLAINTEXT, "Invalid image name.");
+    private NanoHTTPD.Response serveQrCode(@NonNull Map<String, String> params) {
+        String data = params.get("data");
+        if (data == null || data.isEmpty()) {
+            return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, NanoHTTPD.MIME_PLAINTEXT, "Missing data.");
         }
-        File imageFile = new File(AppStoragePaths.resolveWebSocketChatImagesDirectory(context), fileName);
-        return serveFile(imageFile, getImageMimeType(fileName), false);
+        Bitmap bitmap = QRCodeHelper.generateQrCode(data, 512);
+        if (bitmap == null) {
+            return newFixedLengthResponse(NanoHTTPD.Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, "Failed to generate QR code.");
+        }
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream);
+        byte[] bytes = outputStream.toByteArray();
+        return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "image/png", new ByteArrayInputStream(bytes), bytes.length);
+    }
+
+    private void cleanupExpiredUploadSessions() {
+        long now = System.currentTimeMillis();
+        Iterator<Map.Entry<String, UploadSession>> iterator = uploadSessions.entrySet().iterator();
+        while (iterator.hasNext()) {
+            UploadSession session = iterator.next().getValue();
+            if (now - session.lastActiveAt > UPLOAD_SESSION_MAX_AGE_MS) {
+                session.tempFile.delete();
+                iterator.remove();
+            }
+        }
     }
 
     @NonNull
@@ -523,14 +546,14 @@ public final class WebHttpRouter {
                 Collections.addAll(sorted, children);
                 Collections.sort(sorted, new Comparator<File>() {
                     @Override
-                    public int compare(File o1, File o2) {
-                        if (o1.isDirectory() && !o2.isDirectory()) {
+                    public int compare(File first, File second) {
+                        if (first.isDirectory() && !second.isDirectory()) {
                             return -1;
                         }
-                        if (!o1.isDirectory() && o2.isDirectory()) {
+                        if (!first.isDirectory() && second.isDirectory()) {
                             return 1;
                         }
-                        return o1.getName().compareToIgnoreCase(o2.getName());
+                        return first.getName().compareToIgnoreCase(second.getName());
                     }
                 });
                 SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
@@ -580,8 +603,7 @@ public final class WebHttpRouter {
         if (file == null) {
             return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, NanoHTTPD.MIME_PLAINTEXT, "Invalid path.");
         }
-        String mimeType = getMimeType(file.getName());
-        return serveFile(file, mimeType, false);
+        return serveFile(file, getMimeType(file.getName()), false);
     }
 
     @NonNull
@@ -610,10 +632,9 @@ public final class WebHttpRouter {
         if (tmpPath == null || fileName == null || fileName.isEmpty()) {
             return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, NanoHTTPD.MIME_PLAINTEXT, "Missing file.");
         }
-        File tempFile = new File(tmpPath);
         File destination = resolveUniqueFile(directory, fileName);
         try {
-            java.nio.file.Files.copy(tempFile.toPath(), destination.toPath());
+            java.nio.file.Files.copy(new File(tmpPath).toPath(), destination.toPath());
         } catch (Exception exception) {
             AppLogger.e(TAG, "Failed to save uploaded file.", exception);
             return newFixedLengthResponse(NanoHTTPD.Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, "Failed to save file.");
@@ -702,8 +723,7 @@ public final class WebHttpRouter {
         if (index != uploadSession.receivedChunks) {
             return jsonErrorResponse("Unexpected chunk index. Expected " + uploadSession.receivedChunks + " but got " + index + ".");
         }
-        File chunkFile = new File(tmpPath);
-        try (InputStream inputStream = new FileInputStream(chunkFile);
+        try (InputStream inputStream = new FileInputStream(new File(tmpPath));
              OutputStream outputStream = new FileOutputStream(uploadSession.tempFile, true)) {
             byte[] buffer = new byte[8192];
             int read;
@@ -737,8 +757,7 @@ public final class WebHttpRouter {
             session.parseBody(new HashMap<>());
         } catch (Exception ignored) {
         }
-        Map<String, String> params = session.getParms();
-        String uploadId = params.get("id");
+        String uploadId = session.getParms().get("id");
         if (uploadId == null || uploadId.isEmpty()) {
             return jsonErrorResponse("Missing upload id.");
         }
@@ -768,97 +787,26 @@ public final class WebHttpRouter {
         return jsonResponse(result, NanoHTTPD.Response.Status.OK);
     }
 
-    @NonNull
-    private NanoHTTPD.Response handleChatImageUpload(@NonNull NanoHTTPD.IHTTPSession session) {
-        if (session.getMethod() != NanoHTTPD.Method.POST) {
-            return jsonErrorResponse("Use POST.");
+    @Nullable
+    private File resolveFileParam(@Nullable String path) {
+        if (path == null || path.isEmpty() || path.contains("..")) {
+            return null;
         }
-        Map<String, String> files = new HashMap<>();
+        File file = new File(path);
+        if (!file.exists() || !isUnderAllowedRoot(file)) {
+            return null;
+        }
+        return file;
+    }
+
+    private boolean isUnderAllowedRoot(@NonNull File file) {
         try {
-            session.parseBody(files);
+            String canonicalRoot = Environment.getExternalStorageDirectory().getCanonicalPath();
+            String canonicalFile = file.getCanonicalPath();
+            return canonicalFile.startsWith(canonicalRoot);
         } catch (Exception exception) {
-            AppLogger.e(TAG, "Failed to parse chat image upload body.", exception);
-            return jsonErrorResponse("Failed to parse image.");
+            return false;
         }
-        String tmpPath = files.get("image");
-        if (tmpPath == null || tmpPath.isEmpty()) {
-            return jsonErrorResponse("Missing image.");
-        }
-        File uploadedFile = new File(tmpPath);
-        if (!uploadedFile.exists()) {
-            return jsonErrorResponse("Uploaded image not found.");
-        }
-
-        String originalName = session.getParms().getOrDefault("image", "upload");
-        String extension = getImageExtension(originalName);
-        if (extension.isEmpty()) {
-            extension = ".jpg";
-        }
-        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(new Date());
-        String randomSuffix = String.format(Locale.US, "%04d", SECURE_RANDOM.nextInt(10000));
-        String fileName = "IMG_" + timeStamp + "_" + randomSuffix + extension;
-
-        File imageDirectory = AppStoragePaths.resolveWebSocketChatImagesDirectory(context);
-        File destinationFile = new File(imageDirectory, fileName);
-        int conflictIndex = 1;
-        while (destinationFile.exists()) {
-            String conflictName = "IMG_" + timeStamp + "_" + randomSuffix + "_" + conflictIndex + extension;
-            destinationFile = new File(imageDirectory, conflictName);
-            conflictIndex++;
-        }
-
-        try {
-            java.nio.file.Files.copy(uploadedFile.toPath(), destinationFile.toPath());
-        } catch (IOException exception) {
-            AppLogger.e(TAG, "Failed to save chat image.", exception);
-            return jsonErrorResponse("Failed to save image.");
-        }
-
-        String imageUrl = AppConfig.get().getImageUrlPrefix() + fileName;
-        service.sendImageMessage(imageUrl);
-
-        JSONObject result = new JSONObject();
-        try {
-            result.put("success", true);
-            result.put("url", imageUrl);
-            result.put("name", fileName);
-        } catch (JSONException exception) {
-            AppLogger.e(TAG, "Failed to build chat image upload response JSON.", exception);
-        }
-        return jsonResponse(result, NanoHTTPD.Response.Status.OK);
-    }
-
-    @NonNull
-    private String getImageExtension(@NonNull String fileName) {
-        String lower = fileName.toLowerCase(Locale.US);
-        if (lower.endsWith(".png")) {
-            return ".png";
-        }
-        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
-            return ".jpg";
-        }
-        if (lower.endsWith(".gif")) {
-            return ".gif";
-        }
-        if (lower.endsWith(".webp")) {
-            return ".webp";
-        }
-        if (lower.endsWith(".bmp")) {
-            return ".bmp";
-        }
-        return "";
-    }
-
-    @NonNull
-    private NanoHTTPD.Response jsonErrorResponse(@NonNull String message) {
-        JSONObject result = new JSONObject();
-        try {
-            result.put("success", false);
-            result.put("error", message);
-        } catch (JSONException exception) {
-            AppLogger.e(TAG, "Failed to build error JSON.", exception);
-        }
-        return jsonResponse(result, NanoHTTPD.Response.Status.OK);
     }
 
     @NonNull
@@ -878,27 +826,112 @@ public final class WebHttpRouter {
         return file;
     }
 
-    @Nullable
-    private File resolveFileParam(@Nullable String path) {
-        if (path == null || path.isEmpty() || path.contains("..")) {
-            return null;
-        }
-        File file = new File(path);
-        if (!file.exists() || !isUnderAllowedRoot(file)) {
-            return null;
-        }
-        return file;
+    @NonNull
+    private NanoHTTPD.Response handleDeviceInfo() {
+        return jsonResponse(buildDeviceInfo(), NanoHTTPD.Response.Status.OK);
     }
 
-    private boolean isUnderAllowedRoot(@NonNull File file) {
+    @NonNull
+    private JSONObject buildDeviceInfo() {
+        JSONObject info = new JSONObject();
         try {
-            File root = Environment.getExternalStorageDirectory();
-            String canonicalRoot = root.getCanonicalPath();
-            String canonicalFile = file.getCanonicalPath();
-            return canonicalFile.startsWith(canonicalRoot);
-        } catch (Exception exception) {
-            return false;
+            info.put("appName", AppStoragePaths.resolveBaseDirectory(context).getName());
+            info.put("packageName", context.getPackageName());
+            info.put("model", Build.MODEL);
+            info.put("manufacturer", Build.MANUFACTURER);
+            info.put("brand", Build.BRAND);
+            info.put("device", Build.DEVICE);
+            info.put("product", Build.PRODUCT);
+            info.put("hardware", Build.HARDWARE);
+            info.put("board", Build.BOARD);
+            info.put("bootloader", Build.BOOTLOADER);
+            info.put("androidVersion", Build.VERSION.RELEASE);
+            info.put("sdk", Build.VERSION.SDK_INT);
+            info.put("fingerprint", Build.FINGERPRINT);
+            info.put("display", Build.DISPLAY);
+            info.put("host", Build.HOST);
+            info.put("id", Build.ID);
+            info.put("tags", Build.TAGS);
+            info.put("type", Build.TYPE);
+            info.put("user", Build.USER);
+            info.put("time", Build.TIME);
+
+            WindowManager windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+            if (windowManager != null) {
+                DisplayMetrics metrics = new DisplayMetrics();
+                windowManager.getDefaultDisplay().getRealMetrics(metrics);
+                JSONObject display = new JSONObject();
+                display.put("widthPixels", metrics.widthPixels);
+                display.put("heightPixels", metrics.heightPixels);
+                display.put("densityDpi", metrics.densityDpi);
+                display.put("density", metrics.density);
+                display.put("scaledDensity", metrics.scaledDensity);
+                display.put("xdpi", metrics.xdpi);
+                display.put("ydpi", metrics.ydpi);
+                info.put("display", display);
+            }
+
+            JSONObject memory = new JSONObject();
+            android.app.ActivityManager activityManager = (android.app.ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            if (activityManager != null) {
+                android.app.ActivityManager.MemoryInfo memoryInfo = new android.app.ActivityManager.MemoryInfo();
+                activityManager.getMemoryInfo(memoryInfo);
+                memory.put("totalRam", memoryInfo.totalMem);
+                memory.put("availableRam", memoryInfo.availMem);
+                memory.put("lowMemory", memoryInfo.lowMemory);
+            }
+            StatFs storageStat = new StatFs(Environment.getExternalStorageDirectory().getAbsolutePath());
+            memory.put("totalStorage", storageStat.getTotalBytes());
+            memory.put("availableStorage", storageStat.getAvailableBytes());
+            info.put("memory", memory);
+
+            info.put("battery", readBatteryInfo());
+
+            JSONObject cpu = new JSONObject();
+            cpu.put("cores", Runtime.getRuntime().availableProcessors());
+            cpu.put("usage", service.getProcessCpuUsage());
+            info.put("cpu", cpu);
+
+            JSONObject network = new JSONObject();
+            String ip = WebSocketService.getLocalIpAddress();
+            network.put("localIp", ip != null ? ip : "");
+            network.put("httpPort", service.getHttpPort());
+            network.put("wifiConnected", NetworkInfoHelper.isWifiConnected(context));
+            network.put("wifiLinkSpeedMbps", NetworkInfoHelper.getWifiLinkSpeedMbps(context));
+            network.put("wifiSignalDbm", NetworkInfoHelper.getWifiSignalDbm(context));
+            network.put("wifiSignalLevel", NetworkInfoHelper.getWifiSignalLevel(context));
+            network.put("estimatedDistanceMeters", NetworkInfoHelper.estimateWifiDistanceMeters(context));
+            info.put("network", network);
+        } catch (JSONException exception) {
+            AppLogger.e(TAG, "Failed to build device info JSON.", exception);
         }
+        return info;
+    }
+
+    @NonNull
+    private JSONObject readBatteryInfo() {
+        JSONObject battery = new JSONObject();
+        try {
+            IntentFilter filter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+            Intent intent = context.registerReceiver(null, filter);
+            if (intent != null) {
+                int level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+                int scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+                int status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+                int plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1);
+                int temperature = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
+                int voltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1);
+                float percent = level >= 0 && scale > 0 ? (level * 100.0f) / scale : -1;
+                battery.put("level", (int) percent);
+                battery.put("status", status);
+                battery.put("plugged", plugged);
+                battery.put("temperature", temperature / 10.0);
+                battery.put("voltage", voltage);
+            }
+        } catch (Exception exception) {
+            AppLogger.e(TAG, "Failed to read battery info.", exception);
+        }
+        return battery;
     }
 
     @NonNull
@@ -975,124 +1008,27 @@ public final class WebHttpRouter {
     }
 
     @NonNull
-    private NanoHTTPD.Response handleDeviceInfo() {
-        return jsonResponse(buildDeviceInfo(), NanoHTTPD.Response.Status.OK);
-    }
-
-    @NonNull
-    private JSONObject buildDeviceInfo() {
-        JSONObject info = new JSONObject();
+    private NanoHTTPD.Response jsonErrorResponse(@NonNull String message) {
+        JSONObject result = new JSONObject();
         try {
-            info.put("appName", AppStoragePaths.resolveBaseDirectory(context).getName());
-            info.put("packageName", context.getPackageName());
-            info.put("model", Build.MODEL);
-            info.put("manufacturer", Build.MANUFACTURER);
-            info.put("brand", Build.BRAND);
-            info.put("device", Build.DEVICE);
-            info.put("product", Build.PRODUCT);
-            info.put("hardware", Build.HARDWARE);
-            info.put("board", Build.BOARD);
-            info.put("bootloader", Build.BOOTLOADER);
-            info.put("androidVersion", Build.VERSION.RELEASE);
-            info.put("sdk", Build.VERSION.SDK_INT);
-            info.put("fingerprint", Build.FINGERPRINT);
-            info.put("display", Build.DISPLAY);
-            info.put("host", Build.HOST);
-            info.put("id", Build.ID);
-            info.put("tags", Build.TAGS);
-            info.put("type", Build.TYPE);
-            info.put("user", Build.USER);
-            info.put("time", Build.TIME);
-
-            WindowManager windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
-            if (windowManager != null) {
-                DisplayMetrics metrics = new DisplayMetrics();
-                windowManager.getDefaultDisplay().getRealMetrics(metrics);
-                JSONObject display = new JSONObject();
-                display.put("widthPixels", metrics.widthPixels);
-                display.put("heightPixels", metrics.heightPixels);
-                display.put("densityDpi", metrics.densityDpi);
-                display.put("density", metrics.density);
-                display.put("scaledDensity", metrics.scaledDensity);
-                display.put("xdpi", metrics.xdpi);
-                display.put("ydpi", metrics.ydpi);
-                info.put("display", display);
-            }
-
-            JSONObject memory = new JSONObject();
-            android.app.ActivityManager activityManager = (android.app.ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-            if (activityManager != null) {
-                android.app.ActivityManager.MemoryInfo memoryInfo = new android.app.ActivityManager.MemoryInfo();
-                activityManager.getMemoryInfo(memoryInfo);
-                memory.put("totalRam", memoryInfo.totalMem);
-                memory.put("availableRam", memoryInfo.availMem);
-                memory.put("lowMemory", memoryInfo.lowMemory);
-            }
-            StatFs storageStat = new StatFs(Environment.getExternalStorageDirectory().getAbsolutePath());
-            memory.put("totalStorage", storageStat.getTotalBytes());
-            memory.put("availableStorage", storageStat.getAvailableBytes());
-            info.put("memory", memory);
-
-            info.put("battery", readBatteryInfo());
-
-            JSONObject cpu = new JSONObject();
-            cpu.put("cores", Runtime.getRuntime().availableProcessors());
-            cpu.put("usage", service.getProcessCpuUsage());
-            info.put("cpu", cpu);
-
-            JSONObject network = new JSONObject();
-            String ip = service.getLocalIpAddress();
-            network.put("localIp", ip != null ? ip : "");
-            network.put("webSocketPort", service.getWebSocketPort());
-            network.put("httpPort", service.getHttpPort());
-            network.put("wifiConnected", NetworkInfoHelper.isWifiConnected(context));
-            network.put("wifiLinkSpeedMbps", NetworkInfoHelper.getWifiLinkSpeedMbps(context));
-            network.put("wifiSignalDbm", NetworkInfoHelper.getWifiSignalDbm(context));
-            network.put("wifiSignalLevel", NetworkInfoHelper.getWifiSignalLevel(context));
-            network.put("estimatedDistanceMeters", NetworkInfoHelper.estimateWifiDistanceMeters(context));
-            info.put("network", network);
+            result.put("success", false);
+            result.put("error", message);
         } catch (JSONException exception) {
-            AppLogger.e(TAG, "Failed to build device info JSON.", exception);
+            AppLogger.e(TAG, "Failed to build error JSON.", exception);
         }
-        return info;
-    }
-
-    @NonNull
-    private JSONObject readBatteryInfo() {
-        JSONObject battery = new JSONObject();
-        try {
-            IntentFilter filter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
-            Intent intent = context.registerReceiver(null, filter);
-            if (intent != null) {
-                int level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
-                int scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
-                int status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
-                int plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1);
-                int temperature = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
-                int voltage = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1);
-                float percent = level >= 0 && scale > 0 ? (level * 100.0f) / scale : -1;
-                battery.put("level", (int) percent);
-                battery.put("status", status);
-                battery.put("plugged", plugged);
-                battery.put("temperature", temperature / 10.0);
-                battery.put("voltage", voltage);
-            }
-        } catch (Exception exception) {
-            AppLogger.e(TAG, "Failed to read battery info.", exception);
-        }
-        return battery;
+        return jsonResponse(result, NanoHTTPD.Response.Status.OK);
     }
 
     @NonNull
     private NanoHTTPD.Response jsonResponse(@NonNull JSONObject json, @NonNull NanoHTTPD.Response.Status status) {
         byte[] bytes = json.toString().getBytes(StandardCharsets.UTF_8);
-        return newFixedLengthResponse(status, "application/json; charset=utf-8", new java.io.ByteArrayInputStream(bytes), bytes.length);
+        return newFixedLengthResponse(status, "application/json; charset=utf-8", new ByteArrayInputStream(bytes), bytes.length);
     }
 
     @NonNull
     private static NanoHTTPD.Response newFixedLengthResponse(@NonNull NanoHTTPD.Response.Status status, @NonNull String mimeType, @NonNull String message) {
         byte[] bytes = message.getBytes(StandardCharsets.UTF_8);
-        return NanoHTTPD.newFixedLengthResponse(status, mimeType, new java.io.ByteArrayInputStream(bytes), bytes.length);
+        return NanoHTTPD.newFixedLengthResponse(status, mimeType, new ByteArrayInputStream(bytes), bytes.length);
     }
 
     @NonNull
@@ -1134,8 +1070,153 @@ public final class WebHttpRouter {
         return "application/octet-stream";
     }
 
-    @NonNull
-    private static String getImageMimeType(@NonNull String fileName) {
-        return getMimeType(fileName);
+    private static final class WebLoginSession {
+        @NonNull
+        final String sessionId;
+        @NonNull
+        final String token;
+        @NonNull
+        final String authToken;
+        final long createdAt;
+        volatile boolean authenticated;
+        volatile boolean qrReady;
+        volatile long authenticatedAt;
+        volatile long lastSeenAt;
+        @NonNull
+        volatile String remoteAddress = "";
+        @NonNull
+        volatile String browserName = "";
+        @NonNull
+        volatile String platform = "";
+        @NonNull
+        volatile String language = "";
+        @NonNull
+        volatile String timezone = "";
+        @NonNull
+        volatile String userAgent = "";
+        @NonNull
+        volatile String currentPage = "";
+        volatile int screenWidth;
+        volatile int screenHeight;
+
+        WebLoginSession(@NonNull String sessionId, @NonNull String token, @NonNull String authToken) {
+            this.sessionId = sessionId;
+            this.token = token;
+            this.authToken = authToken;
+            this.createdAt = System.currentTimeMillis();
+            this.lastSeenAt = this.createdAt;
+        }
+    }
+
+    public static final class PendingWebLoginInfo {
+        @NonNull
+        public final String sessionId;
+        @NonNull
+        public final String token;
+
+        PendingWebLoginInfo(@NonNull String sessionId, @NonNull String token) {
+            this.sessionId = sessionId;
+            this.token = token;
+        }
+    }
+
+    public static final class FileTransferClientSnapshot {
+        public final boolean authenticated;
+        public final boolean qrReady;
+        public final long createdAt;
+        public final long authenticatedAt;
+        public final long lastSeenAt;
+        @NonNull
+        public final String remoteAddress;
+        @NonNull
+        public final String browserName;
+        @NonNull
+        public final String platform;
+        @NonNull
+        public final String language;
+        @NonNull
+        public final String timezone;
+        @NonNull
+        public final String userAgent;
+        @NonNull
+        public final String currentPage;
+        public final int screenWidth;
+        public final int screenHeight;
+
+        FileTransferClientSnapshot(@NonNull WebLoginSession session) {
+            this.authenticated = session.authenticated;
+            this.qrReady = session.qrReady;
+            this.createdAt = session.createdAt;
+            this.authenticatedAt = session.authenticatedAt;
+            this.lastSeenAt = session.lastSeenAt;
+            this.remoteAddress = session.remoteAddress;
+            this.browserName = session.browserName;
+            this.platform = session.platform;
+            this.language = session.language;
+            this.timezone = session.timezone;
+            this.userAgent = session.userAgent;
+            this.currentPage = session.currentPage;
+            this.screenWidth = session.screenWidth;
+            this.screenHeight = session.screenHeight;
+        }
+    }
+
+    private static final class UploadSession {
+        @NonNull
+        final String uploadId;
+        @NonNull
+        final File targetDirectory;
+        @NonNull
+        final String fileName;
+        @NonNull
+        final File tempFile;
+        volatile long lastActiveAt;
+        int receivedChunks;
+
+        UploadSession(@NonNull String uploadId, @NonNull File targetDirectory, @NonNull String fileName, @NonNull File tempFile, long lastActiveAt) {
+            this.uploadId = uploadId;
+            this.targetDirectory = targetDirectory;
+            this.fileName = fileName;
+            this.tempFile = tempFile;
+            this.lastActiveAt = lastActiveAt;
+        }
+    }
+
+    private static final class RandomAccessFileInputStream extends InputStream {
+        @NonNull
+        private final RandomAccessFile randomAccessFile;
+        private long remaining;
+
+        RandomAccessFileInputStream(@NonNull RandomAccessFile randomAccessFile, long length) {
+            this.randomAccessFile = randomAccessFile;
+            this.remaining = length;
+        }
+
+        @Override
+        public int read() throws IOException {
+            if (remaining <= 0) {
+                return -1;
+            }
+            remaining--;
+            return randomAccessFile.read();
+        }
+
+        @Override
+        public int read(@NonNull byte[] buffer, int offset, int length) throws IOException {
+            if (remaining <= 0) {
+                return -1;
+            }
+            int toRead = (int) Math.min(length, remaining);
+            int read = randomAccessFile.read(buffer, offset, toRead);
+            if (read > 0) {
+                remaining -= read;
+            }
+            return read;
+        }
+
+        @Override
+        public void close() throws IOException {
+            randomAccessFile.close();
+        }
     }
 }

@@ -61,24 +61,6 @@ public final class AppStoragePaths {
     }
 
     @NonNull
-    public static File resolveWebSocketChatDirectory(@NonNull Context context) {
-        File directory = new File(resolveBaseDirectory(context), AppConfig.get().getWebSocketChatFolder());
-        if (!directory.exists()) {
-            directory.mkdirs();
-        }
-        return directory;
-    }
-
-    @NonNull
-    public static File resolveWebSocketChatImagesDirectory(@NonNull Context context) {
-        File directory = new File(resolveWebSocketChatDirectory(context), AppConfig.get().getWebSocketChatImagesFolder());
-        if (!directory.exists()) {
-            directory.mkdirs();
-        }
-        return directory;
-    }
-
-    @NonNull
     @SuppressWarnings("deprecation")
     private static File resolvePreferredBaseDirectory(@NonNull Context context) {
         return new File(Environment.getExternalStorageDirectory(), buildAppFolderName(context));

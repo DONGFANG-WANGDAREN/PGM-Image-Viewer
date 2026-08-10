@@ -1,12 +1,8 @@
 package com.DONGFANG_WANGDAREN.Station_RX.ui.activity;
-
-
 import com.DONGFANG_WANGDAREN.Station_RX.R;
 import com.DONGFANG_WANGDAREN.Station_RX.app.AppLogger;
-import com.DONGFANG_WANGDAREN.Station_RX.rust.RustServerBridge;
 import com.DONGFANG_WANGDAREN.Station_RX.websocket.WebHttpRouter;
 import com.DONGFANG_WANGDAREN.Station_RX.websocket.WebSocketService;
-import com.DONGFANG_WANGDAREN.Station_RX.websocket.WebSocketServiceStatsSnapshot;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -39,9 +35,7 @@ public class ActivityWebSocketDashboard extends AppCompatActivity {
     private static final int DASHBOARD_ITEM_SPACING_DP = 12;
 
     private static final int ID_READER = 0;
-    private static final int ID_CHAT_ROOM = 1;
-    private static final int ID_FILE_TRANSFER = 2;
-    private static final int ID_RUST_SERVER = 3;
+    private static final int ID_FILE_TRANSFER = 1;
 
     private final List<ServiceItem> items = new ArrayList<>();
     private ServiceAdapter adapter;
@@ -135,48 +129,24 @@ public class ActivityWebSocketDashboard extends AppCompatActivity {
         }
         items.add(new ServiceItem(ID_READER, getString(R.string.dashboard_reader), readerStatus, true));
 
-        boolean chatRunning = webSocketService != null && webSocketService.isRunning();
-        String chatStatus;
-        if (chatRunning && webSocketService != null) {
-            WebSocketServiceStatsSnapshot snapshot = webSocketService.getServiceStatsSnapshot();
-            String typingSummary = snapshot.typingUsers > 0
-                    ? getString(R.string.dashboard_chat_typing_users, snapshot.typingUsersSummary)
-                    : getString(R.string.dashboard_chat_typing_idle);
-            chatStatus = getString(
-                    R.string.dashboard_chat_status_detail,
-                    snapshot.activeUsers,
-                    snapshot.totalUniqueUsers,
-                    snapshot.offlineUsers,
-                    snapshot.totalTextMessages,
-                    snapshot.totalImageMessages,
-                    snapshot.totalSystemMessages,
-                    snapshot.formatBytesPerSecond(snapshot.averageBytesReceivedPerSecond),
-                    snapshot.formatBytesPerSecond(snapshot.averageBytesSentPerSecond),
-                    snapshot.wifiLinkSpeedMbps < 0 ? getString(R.string.stats_unavailable) : snapshot.wifiLinkSpeedMbps + " Mbps",
-                    typingSummary
-            );
-        } else {
-            chatStatus = getString(R.string.dashboard_status_stopped);
-        }
-        items.add(new ServiceItem(ID_CHAT_ROOM, getString(R.string.dashboard_chat_room), chatStatus, chatRunning));
-
-        boolean scanLoginRunning = chatRunning;
+        boolean scanLoginRunning = webSocketService != null && webSocketService.isRunning();
         String scanLoginStatus = scanLoginRunning ? getString(R.string.dashboard_status_running_simple) : getString(R.string.dashboard_status_stopped);
         String loginUrl = webSocketService != null ? webSocketService.getWebLoginUrl() : null;
         if (scanLoginRunning && loginUrl != null && !loginUrl.isEmpty()) {
-            WebHttpRouter.PendingWebLoginInfo pendingInfo = WebHttpRouter.getLatestPendingWebLoginInfo();
-            scanLoginStatus = loginUrl + "\n" + getString(
-                    pendingInfo != null ? R.string.dashboard_file_transfer_pending : R.string.dashboard_file_transfer_idle);
+            WebHttpRouter.FileTransferClientSnapshot snapshot = WebHttpRouter.getLatestFileTransferClientSnapshot();
+            if (snapshot != null) {
+                String computerName = buildComputerName(snapshot);
+                int summaryRes = snapshot.authenticated
+                        ? R.string.dashboard_file_transfer_connected
+                        : R.string.dashboard_file_transfer_pending_client;
+                scanLoginStatus = loginUrl + "\n" + getString(summaryRes, computerName);
+            } else {
+                WebHttpRouter.PendingWebLoginInfo pendingInfo = WebHttpRouter.getLatestPendingWebLoginInfo();
+                scanLoginStatus = loginUrl + "\n" + getString(
+                        pendingInfo != null ? R.string.dashboard_file_transfer_pending : R.string.dashboard_file_transfer_idle);
+            }
         }
         items.add(new ServiceItem(ID_FILE_TRANSFER, getString(R.string.dashboard_file_transfer), scanLoginStatus, scanLoginRunning));
-
-        boolean rustRunning = RustServerBridge.isRunning();
-        String rustStatus = rustRunning ? getString(R.string.dashboard_status_running_simple) : getString(R.string.dashboard_status_stopped);
-        if (rustRunning) {
-            String rustAddress = RustServerBridge.getCurrentAddress();
-            rustStatus = getString(R.string.dashboard_status_running_with_address, rustAddress != null ? rustAddress : "-");
-        }
-        items.add(new ServiceItem(ID_RUST_SERVER, getString(R.string.dashboard_rust_server), rustStatus, rustRunning));
 
         adapter.notifyDataSetChanged();
     }
@@ -190,18 +160,29 @@ public class ActivityWebSocketDashboard extends AppCompatActivity {
             case ID_READER:
                 startActivity(new Intent(this, ActivityReaderStats.class));
                 break;
-            case ID_CHAT_ROOM:
-                startActivity(new Intent(this, ActivityWebSocketStats.class));
-                break;
             case ID_FILE_TRANSFER:
-                Intent fileTransferIntent = new Intent(this, ActivityTools.class);
-                fileTransferIntent.putExtra(ActivityTools.EXTRA_OPEN_SCAN_LOGIN, true);
-                startActivity(fileTransferIntent);
+                startActivity(new Intent(this, ActivityFileTransferStats.class));
                 break;
-            case ID_RUST_SERVER:
-                startActivity(new Intent(this, ActivityRustServer.class));
+            default:
                 break;
         }
+    }
+
+    @NonNull
+    private String buildComputerName(@NonNull WebHttpRouter.FileTransferClientSnapshot snapshot) {
+        String browser = snapshot.browserName != null && !snapshot.browserName.trim().isEmpty()
+                ? snapshot.browserName.trim()
+                : getString(R.string.reader_stats_empty_value);
+        String platform = snapshot.platform != null && !snapshot.platform.trim().isEmpty()
+                ? snapshot.platform.trim()
+                : getString(R.string.reader_stats_empty_value);
+        if (browser.equals(getString(R.string.reader_stats_empty_value))) {
+            return platform;
+        }
+        if (platform.equals(getString(R.string.reader_stats_empty_value))) {
+            return browser;
+        }
+        return browser + " / " + platform;
     }
 
     @NonNull

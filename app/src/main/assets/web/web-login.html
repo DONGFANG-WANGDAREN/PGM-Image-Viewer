@@ -33,8 +33,10 @@ async function init(){
     const loginUrl=d.loginUrl;
     const qrData='rrx://login?session='+encodeURIComponent(sessionId)+'&token='+encodeURIComponent(token);
     const qrImageUrl='/api/qr.png?data='+encodeURIComponent(qrData);
+    window.sessionStorage.setItem('rrx_file_transfer_session',sessionId);
     document.getElementById('loginUrl').textContent=loginUrl;
     document.getElementById('qrImage').src=qrImageUrl;
+    reportClientInfo(sessionId,'web-login');
     setInterval(function(){check(sessionId);},2000);
   }catch(e){
     document.getElementById('status').textContent='加载失败: '+e;
@@ -44,11 +46,39 @@ async function check(sessionId){
   try{
     const r=await fetch('/api/session-status?session='+encodeURIComponent(sessionId));
     const d=await r.json();
-    if(d.authenticated){window.location.href='/files';return;}
+    if(d.authenticated){
+      reportClientInfo(sessionId,'files');
+      window.location.href='/files';
+      return;
+    }
     document.getElementById('status').textContent='等待扫码...';
   }catch(e){
     document.getElementById('status').textContent='连接错误';
   }
+}
+function detectBrowser(){
+  const ua=(navigator.userAgent||'').toLowerCase();
+  if(ua.includes('edg/')) return 'Microsoft Edge';
+  if(ua.includes('chrome/') && !ua.includes('edg/')) return 'Google Chrome';
+  if(ua.includes('firefox/')) return 'Mozilla Firefox';
+  if(ua.includes('safari/') && !ua.includes('chrome/')) return 'Safari';
+  if(ua.includes('opr/') || ua.includes('opera/')) return 'Opera';
+  return 'Unknown Browser';
+}
+function reportClientInfo(sessionId,page){
+  try{
+    const params=new URLSearchParams();
+    params.set('session',sessionId);
+    params.set('browser',detectBrowser());
+    params.set('platform',navigator.platform||'');
+    params.set('language',navigator.language||'');
+    params.set('timezone',(Intl.DateTimeFormat().resolvedOptions().timeZone)||'');
+    params.set('screenWidth',String(window.screen&&window.screen.width?window.screen.width:0));
+    params.set('screenHeight',String(window.screen&&window.screen.height?window.screen.height:0));
+    params.set('userAgent',navigator.userAgent||'');
+    params.set('page',page||'web-login');
+    fetch('/api/web-login-client-info?'+params.toString()).catch(()=>{});
+  }catch(e){}
 }
 init();
 </script>

@@ -25,27 +25,13 @@ public final class AppConfig {
     private final String appFolderName;
     private final String logsFolder;
     private final String historyFolder;
-    private final String webSocketChatFolder;
-    private final String webSocketChatImagesFolder;
 
     private final String logDayFolderFormat;
     private final String logFileNameFormat;
     private final String logFileExtension;
     private final String historyFileName;
-    private final String chatDayFolderFormat;
-    private final String chatFileNameFormat;
-    private final String chatFileExtension;
-    private final String chatLogTimeFormat;
-    private final String chatImageFileNameFormat;
-    private final String chatImageFileDefaultExtension;
 
-    private final int webSocketPort;
     private final int httpPort;
-    private final String senderApp;
-    private final String senderSystem;
-    private final String messageTypeText;
-    private final String messageTypeImage;
-    private final String imageUrlPrefix;
 
     private final int textPreviewInitialCharacters;
     private final int largeTextInteractionThreshold;
@@ -62,8 +48,6 @@ public final class AppConfig {
         this.appFolderName = storage.optString("appFolderName", "Station RX");
         this.logsFolder = storage.optString("logsFolder", "Log");
         this.historyFolder = storage.optString("historyFolder", "History");
-        this.webSocketChatFolder = storage.optString("webSocketChatFolder", "WebSocket/Chat");
-        this.webSocketChatImagesFolder = storage.optString("webSocketChatImagesFolder", "Images");
 
         JSONObject naming = config.optJSONObject("naming");
         if (naming == null) {
@@ -73,24 +57,12 @@ public final class AppConfig {
         this.logFileNameFormat = naming.optString("logFileNameFormat", "Log_HH-mm_yyyy-MM-dd");
         this.logFileExtension = naming.optString("logFileExtension", ".txt");
         this.historyFileName = naming.optString("historyFileName", "History.json");
-        this.chatDayFolderFormat = naming.optString("chatDayFolderFormat", "yyyy-MM-dd");
-        this.chatFileNameFormat = naming.optString("chatFileNameFormat", "Chat_HH-mm-ss_yyyy-MM-dd");
-        this.chatFileExtension = naming.optString("chatFileExtension", ".txt");
-        this.chatLogTimeFormat = naming.optString("chatLogTimeFormat", "HH:mm:ss");
-        this.chatImageFileNameFormat = naming.optString("chatImageFileNameFormat", "Chat_yyyy-MM-dd_HH-mm-ss");
-        this.chatImageFileDefaultExtension = naming.optString("chatImageFileDefaultExtension", ".jpg");
 
         JSONObject websocket = config.optJSONObject("websocket");
         if (websocket == null) {
             websocket = new JSONObject();
         }
-        this.webSocketPort = websocket.optInt("port", 8080);
         this.httpPort = websocket.optInt("httpPort", 8081);
-        this.senderApp = websocket.optString("senderApp", "Station RX");
-        this.senderSystem = websocket.optString("senderSystem", "System");
-        this.messageTypeText = websocket.optString("messageTypeText", "text");
-        this.messageTypeImage = websocket.optString("messageTypeImage", "image");
-        this.imageUrlPrefix = websocket.optString("imageUrlPrefix", "/images/");
 
         JSONObject viewer = config.optJSONObject("viewer");
         if (viewer == null) {
@@ -165,16 +137,6 @@ public final class AppConfig {
     }
 
     @NonNull
-    public String getWebSocketChatFolder() {
-        return webSocketChatFolder;
-    }
-
-    @NonNull
-    public String getWebSocketChatImagesFolder() {
-        return webSocketChatImagesFolder;
-    }
-
-    @NonNull
     public String getLogDayFolderFormat() {
         return logDayFolderFormat;
     }
@@ -194,67 +156,8 @@ public final class AppConfig {
         return historyFileName;
     }
 
-    @NonNull
-    public String getChatDayFolderFormat() {
-        return chatDayFolderFormat;
-    }
-
-    @NonNull
-    public String getChatFileNameFormat() {
-        return chatFileNameFormat;
-    }
-
-    @NonNull
-    public String getChatFileExtension() {
-        return chatFileExtension;
-    }
-
-    @NonNull
-    public String getChatLogTimeFormat() {
-        return chatLogTimeFormat;
-    }
-
-    @NonNull
-    public String getChatImageFileNameFormat() {
-        return chatImageFileNameFormat;
-    }
-
-    @NonNull
-    public String getChatImageFileDefaultExtension() {
-        return chatImageFileDefaultExtension;
-    }
-
-    public int getWebSocketPort() {
-        return webSocketPort;
-    }
-
     public int getHttpPort() {
         return httpPort;
-    }
-
-    @NonNull
-    public String getSenderApp() {
-        return senderApp;
-    }
-
-    @NonNull
-    public String getSenderSystem() {
-        return senderSystem;
-    }
-
-    @NonNull
-    public String getMessageTypeText() {
-        return messageTypeText;
-    }
-
-    @NonNull
-    public String getMessageTypeImage() {
-        return messageTypeImage;
-    }
-
-    @NonNull
-    public String getImageUrlPrefix() {
-        return imageUrlPrefix;
     }
 
     public int getTextPreviewInitialCharacters() {

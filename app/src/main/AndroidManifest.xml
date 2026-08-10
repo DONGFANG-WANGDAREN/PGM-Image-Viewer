@@ -220,30 +220,21 @@
             android:exported="false" />
 
         <activity
+            android:name=".ui.activity.ActivityFileTransferStats"
+            android:exported="false"
+            android:label="@string/file_transfer_stats_title"
+            android:theme="@style/Theme.PGMImageViewer" />
+
+        <activity
             android:name=".ui.activity.ActivityTools"
             android:exported="false"
             android:label="@string/tools_title"
             android:theme="@style/Theme.PGMImageViewer" />
 
         <activity
-            android:name=".ui.activity.ActivityWebSocket"
-            android:exported="false"
-            android:label="@string/websocket_title"
-            android:theme="@style/Theme.PGMImageViewer" />
-        <activity
             android:name=".ui.activity.ActivityWebSocketDashboard"
             android:exported="false"
             android:label="@string/tools_dashboard"
-            android:theme="@style/Theme.PGMImageViewer" />
-        <activity
-            android:name=".ui.activity.ActivityWebSocketStats"
-            android:exported="false"
-            android:label="@string/tools_dashboard_stats"
-            android:theme="@style/Theme.PGMImageViewer" />
-        <activity
-            android:name=".ui.activity.ActivityRustServer"
-            android:exported="false"
-            android:label="@string/rust_server_title"
             android:theme="@style/Theme.PGMImageViewer" />
 
         <service

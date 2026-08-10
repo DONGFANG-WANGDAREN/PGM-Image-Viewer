@@ -1513,32 +1513,20 @@ public class ActivityPictureViewer extends AppCompatActivity {
 
     @Nullable
     private String readHistoryFromFile() {
-        File historyFile = getHistoryFile();
-        if (!historyFile.exists()) {
-            return null;
-        }
-        try (InputStream inputStream = new java.io.FileInputStream(historyFile)) {
-            byte[] rawBytes = inputStream.readAllBytes();
-            return new String(rawBytes, StandardCharsets.UTF_8);
+        try {
+            return com.DONGFANG_WANGDAREN.Station_RX.storage.AppFileStore.readHistoryJson(this);
         } catch (IOException exception) {
-            AppLogger.e(TAG, "Failed to read history file. path=" + historyFile.getAbsolutePath(), exception);
+            AppLogger.e(TAG, "Failed to read history file.", exception);
             return null;
         }
     }
 
     private void writeHistoryToFile(@NonNull String historyJson) {
-        File historyFile = getHistoryFile();
-        try (OutputStreamWriter writer = new OutputStreamWriter(new java.io.FileOutputStream(historyFile, false), StandardCharsets.UTF_8)) {
-            writer.write(historyJson);
-            writer.flush();
+        try {
+            com.DONGFANG_WANGDAREN.Station_RX.storage.AppFileStore.writeHistoryJson(this, historyJson);
         } catch (IOException exception) {
-            AppLogger.e(TAG, "Failed to write history file. path=" + historyFile.getAbsolutePath(), exception);
+            AppLogger.e(TAG, "Failed to write history file.", exception);
         }
-    }
-
-    @NonNull
-    private File getHistoryFile() {
-        return new File(AppStoragePaths.resolveHistoryDirectory(this), AppConfig.get().getHistoryFileName());
     }
 
     private void togglePrettyPrint() {

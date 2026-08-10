@@ -69,9 +69,9 @@ The HTTP server provides a web login flow designed for use from another device o
 From the web interface you can:
 
 - View detailed device information.
-- Browse files in external storage.
+- Browse files in the app-managed file transfer directory.
 - Download files or view text and image files online.
-- Upload files from the browser to the current folder.
+- Upload files into `Station RX/文件传输/yyyy-MM-dd/`.
 
 The browser session is authenticated with a randomly generated token stored in a cookie. Each QR code is single-use and expires after a few minutes if not scanned. After the web page is opened, the browser reports client metadata back to the app, including IP, browser name, platform, language, timezone, screen size, current page, and last seen time.
 
@@ -101,8 +101,8 @@ The file transfer detail page is used to inspect the currently connected or pend
 
 Folder names, file naming formats, and many runtime constants are centralized in [`app_config.json`](app/src/main/assets/app_config.json). The file is loaded when the app starts and covers:
 
-- Storage folder names (`Station RX`, `Log`, `History`).
-- Log and history file naming formats.
+- Storage folder names (`Station RX`, `日志`, `历史记录`, `文件传输`).
+- Log, history, and file transfer date naming formats.
 - HTTP port for the LAN file transfer service.
 - Text preview limits, history record limits, and text size range.
 
@@ -117,7 +117,23 @@ When editing naming formats, any non-date literal (for example `Log_` or `Chat_`
 Runtime logs are written to external storage so they can be inspected without Android Studio:
 
 ```
-/Station RX/Log/yyyy-MM-dd/Log_HH-mm_yyyy-MM-dd.txt
+/Station RX/日志/yyyy-MM-dd/Log_HH-mm_yyyy-MM-dd.txt
 ```
 
 A new file is created each time the app starts. Logs follow the Android Studio Logcat format.
+
+## Storage Layout
+
+Current app-managed file output uses this structure:
+
+```
+/Station RX/
+  日志/
+    yyyy-MM-dd/
+      Log_HH-mm_yyyy-MM-dd.txt
+  历史记录/
+    History.json
+  文件传输/
+    yyyy-MM-dd/
+      <uploaded files>
+```

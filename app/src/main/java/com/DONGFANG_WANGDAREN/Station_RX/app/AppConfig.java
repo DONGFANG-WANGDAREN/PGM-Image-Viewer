@@ -25,11 +25,13 @@ public final class AppConfig {
     private final String appFolderName;
     private final String logsFolder;
     private final String historyFolder;
+    private final String fileTransferFolder;
 
     private final String logDayFolderFormat;
     private final String logFileNameFormat;
     private final String logFileExtension;
     private final String historyFileName;
+    private final String fileTransferDayFolderFormat;
 
     private final int httpPort;
 
@@ -46,8 +48,9 @@ public final class AppConfig {
             storage = new JSONObject();
         }
         this.appFolderName = storage.optString("appFolderName", "Station RX");
-        this.logsFolder = storage.optString("logsFolder", "Log");
-        this.historyFolder = storage.optString("historyFolder", "History");
+        this.logsFolder = storage.optString("logsFolder", "日志");
+        this.historyFolder = storage.optString("historyFolder", "历史记录");
+        this.fileTransferFolder = storage.optString("fileTransferFolder", "文件传输");
 
         JSONObject naming = config.optJSONObject("naming");
         if (naming == null) {
@@ -57,6 +60,7 @@ public final class AppConfig {
         this.logFileNameFormat = naming.optString("logFileNameFormat", "Log_HH-mm_yyyy-MM-dd");
         this.logFileExtension = naming.optString("logFileExtension", ".txt");
         this.historyFileName = naming.optString("historyFileName", "History.json");
+        this.fileTransferDayFolderFormat = naming.optString("fileTransferDayFolderFormat", "yyyy-MM-dd");
 
         JSONObject websocket = config.optJSONObject("websocket");
         if (websocket == null) {
@@ -137,6 +141,11 @@ public final class AppConfig {
     }
 
     @NonNull
+    public String getFileTransferFolder() {
+        return fileTransferFolder;
+    }
+
+    @NonNull
     public String getLogDayFolderFormat() {
         return logDayFolderFormat;
     }
@@ -154,6 +163,11 @@ public final class AppConfig {
     @NonNull
     public String getHistoryFileName() {
         return historyFileName;
+    }
+
+    @NonNull
+    public String getFileTransferDayFolderFormat() {
+        return fileTransferDayFolderFormat;
     }
 
     public int getHttpPort() {

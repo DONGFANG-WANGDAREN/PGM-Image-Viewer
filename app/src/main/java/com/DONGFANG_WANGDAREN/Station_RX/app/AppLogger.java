@@ -1,7 +1,5 @@
 package com.DONGFANG_WANGDAREN.Station_RX.app;
 
-
-import com.DONGFANG_WANGDAREN.Station_RX.storage.AppStoragePaths;
 import android.content.Context;
 import android.os.Build;
 import android.os.Process;
@@ -10,8 +8,9 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.DONGFANG_WANGDAREN.Station_RX.storage.AppFileStore;
+
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -46,7 +45,7 @@ public final class AppLogger {
             applicationContext = context.getApplicationContext();
             initialized = true;
 
-            File logFile = createSessionLogFile(applicationContext);
+            File logFile = AppFileStore.createSessionLogFile(applicationContext);
             sessionLogFile = logFile;
             sessionLogDirectory = logFile == null ? null : logFile.getParentFile();
             if (logFile != null) {
@@ -63,7 +62,7 @@ public final class AppLogger {
         synchronized (LOCK) {
             applicationContext = context.getApplicationContext();
             previousLogFile = sessionLogFile;
-            newLogFile = createSessionLogFile(applicationContext);
+            newLogFile = AppFileStore.createSessionLogFile(applicationContext);
             if (newLogFile != null && previousLogFile != null && !newLogFile.equals(previousLogFile)) {
                 migrateLogFile(previousLogFile, newLogFile);
             }
@@ -80,7 +79,7 @@ public final class AppLogger {
     private static void migrateLogFile(@NonNull File source, @NonNull File destination) {
         EXECUTOR.execute(() -> {
             try {
-                java.nio.file.Files.copy(source.toPath(), destination.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                AppFileStore.migrateLogFile(source, destination);
             } catch (IOException | UnsupportedOperationException exception) {
                 Log.e(TAG, "Failed to migrate log file to new location.", exception);
             }
@@ -155,64 +154,12 @@ public final class AppLogger {
         }
 
         EXECUTOR.execute(() -> {
-            try (FileWriter fileWriter = new FileWriter(logFile, true)) {
-                fileWriter.write(text);
-                fileWriter.write('\n');
-                fileWriter.flush();
+            try {
+                AppFileStore.appendLogLine(logFile, text);
             } catch (IOException exception) {
                 Log.e(TAG, "Failed to append log file.", exception);
             }
         });
-    }
-
-    @Nullable
-    private static File createSessionLogFile(@Nullable Context context) {
-        if (context == null) {
-            return null;
-        }
-
-        AppConfig config = AppConfig.get();
-        File logsDirectory = AppStoragePaths.resolveLogsDirectory(context);
-        Date now = new Date();
-        File dayDirectory = new File(logsDirectory, format(now, config.getLogDayFolderFormat()));
-        if (!ensureDirectory(dayDirectory)) {
-            return null;
-        }
-
-        String baseName = format(now, config.getLogFileNameFormat());
-        File logFile = findUniqueLogFile(dayDirectory, baseName, config.getLogFileExtension());
-        try {
-            if (!logFile.exists() && !logFile.createNewFile()) {
-                return null;
-            }
-        } catch (IOException exception) {
-            return null;
-        }
-        return logFile;
-    }
-
-    private static boolean ensureDirectory(@NonNull File directory) {
-        return directory.exists() || directory.mkdirs();
-    }
-
-    @NonNull
-    private static File findUniqueLogFile(@NonNull File directory, @NonNull String baseName, @NonNull String extension) {
-        String suffix = extension.startsWith(".") ? extension : "." + extension;
-        File candidate = new File(directory, baseName + suffix);
-        if (!candidate.exists()) {
-            return candidate;
-        }
-        int index = 1;
-        while (true) {
-            candidate = new File(directory, baseName + "_" + index + suffix);
-            if (!candidate.exists()) {
-                return candidate;
-            }
-            index++;
-            if (index > 9999) {
-                return new File(directory, baseName + "_" + System.currentTimeMillis() + suffix);
-            }
-        }
     }
 
     @NonNull

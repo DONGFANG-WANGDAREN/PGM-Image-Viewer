@@ -1,10 +1,10 @@
 package com.DONGFANG_WANGDAREN.Station_RX.storage;
 
-
-import com.DONGFANG_WANGDAREN.Station_RX.app.AppConfig;
 import android.content.Context;
+import com.DONGFANG_WANGDAREN.Station_RX.app.AppConfig;
 import android.os.Build;
 import android.os.Environment;
+
 
 import androidx.annotation.NonNull;
 
@@ -40,24 +40,6 @@ public final class AppStoragePaths {
             return true;
         }
         return preferredDirectory.mkdirs();
-    }
-
-    @NonNull
-    public static File resolveLogsDirectory(@NonNull Context context) {
-        File directory = new File(resolveBaseDirectory(context), AppConfig.get().getLogsFolder());
-        if (!directory.exists()) {
-            directory.mkdirs();
-        }
-        return directory;
-    }
-
-    @NonNull
-    public static File resolveHistoryDirectory(@NonNull Context context) {
-        File directory = new File(resolveBaseDirectory(context), AppConfig.get().getHistoryFolder());
-        if (!directory.exists()) {
-            directory.mkdirs();
-        }
-        return directory;
     }
 
     @NonNull

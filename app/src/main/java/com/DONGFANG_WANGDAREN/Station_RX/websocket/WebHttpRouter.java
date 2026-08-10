@@ -14,7 +14,9 @@ import android.view.WindowManager;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.DONGFANG_WANGDAREN.Station_RX.app.AppConfig;
 import com.DONGFANG_WANGDAREN.Station_RX.app.AppLogger;
+import com.DONGFANG_WANGDAREN.Station_RX.storage.AppFileStore;
 import com.DONGFANG_WANGDAREN.Station_RX.storage.AppStoragePaths;
 import com.DONGFANG_WANGDAREN.Station_RX.util.QRCodeHelper;
 
@@ -27,10 +29,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
@@ -524,21 +524,24 @@ public final class WebHttpRouter {
 
     @NonNull
     private NanoHTTPD.Response handleFileList(@NonNull Map<String, String> params) {
-        String path = params.get("path");
-        if (path == null || path.isEmpty()) {
-            path = Environment.getExternalStorageDirectory().getAbsolutePath();
-        }
-        File directory = new File(path);
-        if (!directory.exists() || !directory.isDirectory()) {
+        File directory = AppFileStore.resolveFileTransferDirectory(context, params.get("path"));
+        if (directory == null) {
             return jsonResponse(new JSONObject(), NanoHTTPD.Response.Status.NOT_FOUND);
-        }
-        if (!isUnderAllowedRoot(directory)) {
-            return jsonResponse(new JSONObject(), NanoHTTPD.Response.Status.FORBIDDEN);
         }
         JSONObject result = new JSONObject();
         try {
+            File rootDirectory = AppFileStore.getFileTransferRootDirectory(context);
             result.put("path", directory.getAbsolutePath());
-            result.put("parent", directory.getParent());
+            result.put("rootPath", rootDirectory.getAbsolutePath());
+            result.put("rootName", AppConfig.get().getFileTransferFolder());
+            String parent = directory.getParent();
+            if (parent != null && parent.equals(rootDirectory.getAbsolutePath())) {
+                result.put("parent", parent);
+            } else if (directory.getAbsolutePath().equals(rootDirectory.getAbsolutePath())) {
+                result.put("parent", JSONObject.NULL);
+            } else {
+                result.put("parent", parent);
+            }
             JSONArray files = new JSONArray();
             File[] children = directory.listFiles();
             if (children != null) {
@@ -619,12 +622,8 @@ public final class WebHttpRouter {
             return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, NanoHTTPD.MIME_PLAINTEXT, "Failed to parse upload.");
         }
         Map<String, String> params = session.getParms();
-        String path = params.get("path");
-        if (path == null || path.isEmpty()) {
-            path = Environment.getExternalStorageDirectory().getAbsolutePath();
-        }
-        File directory = new File(path);
-        if (!directory.exists() || !directory.isDirectory() || !isUnderAllowedRoot(directory)) {
+        File directory = AppFileStore.resolveFileTransferDirectory(context, params.get("path"));
+        if (directory == null) {
             return newFixedLengthResponse(NanoHTTPD.Response.Status.FORBIDDEN, NanoHTTPD.MIME_PLAINTEXT, "Invalid directory.");
         }
         String fileName = params.get("file");
@@ -632,21 +631,16 @@ public final class WebHttpRouter {
         if (tmpPath == null || fileName == null || fileName.isEmpty()) {
             return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, NanoHTTPD.MIME_PLAINTEXT, "Missing file.");
         }
-        File destination = resolveUniqueFile(directory, fileName);
         try {
-            java.nio.file.Files.copy(new File(tmpPath).toPath(), destination.toPath());
+            File destination = AppFileStore.saveUploadedFile(directory, fileName, new File(tmpPath));
+            JSONObject result = new JSONObject();
+            result.put("success", true);
+            result.put("path", destination.getAbsolutePath());
+            return jsonResponse(result, NanoHTTPD.Response.Status.OK);
         } catch (Exception exception) {
             AppLogger.e(TAG, "Failed to save uploaded file.", exception);
             return newFixedLengthResponse(NanoHTTPD.Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, "Failed to save file.");
         }
-        JSONObject result = new JSONObject();
-        try {
-            result.put("success", true);
-            result.put("path", destination.getAbsolutePath());
-        } catch (JSONException exception) {
-            AppLogger.e(TAG, "Failed to build upload response JSON.", exception);
-        }
-        return jsonResponse(result, NanoHTTPD.Response.Status.OK);
     }
 
     @NonNull
@@ -658,28 +652,17 @@ public final class WebHttpRouter {
         if (uploadId == null || uploadId.isEmpty() || fileName == null || fileName.isEmpty()) {
             return jsonErrorResponse("Missing upload id or file name.");
         }
-        if (path == null || path.isEmpty()) {
-            path = Environment.getExternalStorageDirectory().getAbsolutePath();
-        }
-        File directory = new File(path);
-        if (!directory.exists() || !directory.isDirectory() || !isUnderAllowedRoot(directory)) {
+        File directory = AppFileStore.resolveFileTransferDirectory(context, path);
+        if (directory == null) {
             return jsonErrorResponse("Invalid directory.");
         }
-        File cacheDir = new File(context.getCacheDir(), "web_uploads");
-        if (!cacheDir.exists()) {
-            cacheDir.mkdirs();
-        }
-        File tempFile = new File(cacheDir, uploadId + ".tmp");
         try {
-            if (tempFile.exists()) {
-                tempFile.delete();
-            }
-            tempFile.createNewFile();
+            File tempFile = AppFileStore.createUploadTempFile(context, uploadId);
+            uploadSessions.put(uploadId, new UploadSession(uploadId, directory, fileName, tempFile, System.currentTimeMillis()));
         } catch (IOException exception) {
             AppLogger.e(TAG, "Failed to create upload temp file.", exception);
             return jsonErrorResponse("Failed to initialize upload.");
         }
-        uploadSessions.put(uploadId, new UploadSession(uploadId, directory, fileName, tempFile, System.currentTimeMillis()));
         JSONObject result = new JSONObject();
         try {
             result.put("success", true);
@@ -723,14 +706,8 @@ public final class WebHttpRouter {
         if (index != uploadSession.receivedChunks) {
             return jsonErrorResponse("Unexpected chunk index. Expected " + uploadSession.receivedChunks + " but got " + index + ".");
         }
-        try (InputStream inputStream = new FileInputStream(new File(tmpPath));
-             OutputStream outputStream = new FileOutputStream(uploadSession.tempFile, true)) {
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = inputStream.read(buffer)) != -1) {
-                outputStream.write(buffer, 0, read);
-            }
-            outputStream.flush();
+        try {
+            AppFileStore.appendUploadChunk(uploadSession.tempFile, new File(tmpPath));
             uploadSession.receivedChunks++;
             uploadSession.lastActiveAt = System.currentTimeMillis();
         } catch (IOException exception) {
@@ -765,16 +742,17 @@ public final class WebHttpRouter {
         if (uploadSession == null) {
             return jsonErrorResponse("Upload session not found.");
         }
-        File destination = resolveUniqueFile(uploadSession.targetDirectory, uploadSession.fileName);
-        if (!uploadSession.tempFile.renameTo(destination)) {
-            try {
-                java.nio.file.Files.copy(uploadSession.tempFile.toPath(), destination.toPath());
-                uploadSession.tempFile.delete();
-            } catch (IOException exception) {
-                AppLogger.e(TAG, "Failed to finalize uploaded file.", exception);
-                uploadSession.tempFile.delete();
-                return jsonErrorResponse("Failed to save file.");
-            }
+        File destination;
+        try {
+            destination = AppFileStore.finalizeUploadedTempFile(
+                    uploadSession.targetDirectory,
+                    uploadSession.fileName,
+                    uploadSession.tempFile
+            );
+        } catch (IOException exception) {
+            AppLogger.e(TAG, "Failed to finalize uploaded file.", exception);
+            uploadSession.tempFile.delete();
+            return jsonErrorResponse("Failed to save file.");
         }
         JSONObject result = new JSONObject();
         try {
@@ -793,35 +771,8 @@ public final class WebHttpRouter {
             return null;
         }
         File file = new File(path);
-        if (!file.exists() || !isUnderAllowedRoot(file)) {
+        if (!file.exists() || !AppFileStore.isUnderFileTransferRoot(context, file)) {
             return null;
-        }
-        return file;
-    }
-
-    private boolean isUnderAllowedRoot(@NonNull File file) {
-        try {
-            String canonicalRoot = Environment.getExternalStorageDirectory().getCanonicalPath();
-            String canonicalFile = file.getCanonicalPath();
-            return canonicalFile.startsWith(canonicalRoot);
-        } catch (Exception exception) {
-            return false;
-        }
-    }
-
-    @NonNull
-    private File resolveUniqueFile(@NonNull File directory, @NonNull String fileName) {
-        File file = new File(directory, fileName);
-        if (!file.exists()) {
-            return file;
-        }
-        int dotIndex = fileName.lastIndexOf('.');
-        String base = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
-        String extension = dotIndex > 0 ? fileName.substring(dotIndex) : "";
-        int index = 1;
-        while (file.exists()) {
-            file = new File(directory, base + "_" + index + extension);
-            index++;
         }
         return file;
     }

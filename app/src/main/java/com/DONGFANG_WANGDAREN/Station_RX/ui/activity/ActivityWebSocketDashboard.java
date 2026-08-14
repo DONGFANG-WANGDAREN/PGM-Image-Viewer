@@ -25,6 +25,7 @@ import com.google.android.material.appbar.MaterialToolbar;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -121,9 +122,12 @@ public class ActivityWebSocketDashboard extends AppCompatActivity {
             readerStatus = readerSnapshot.fileName
                     + "\n" + readerSnapshot.filePath
                     + "\n" + getString(R.string.dashboard_reader_status_detail,
-                    readerSnapshot.openModeLabel,
+                    readerSnapshot.detailedTypeLabel,
                     formatBytes(readerSnapshot.fileSizeBytes),
                     formatBytes(readerSnapshot.usedMemoryBytes));
+            if (!readerSnapshot.mimeType.isEmpty()) {
+                readerStatus = readerStatus + "\nMIME: " + readerSnapshot.mimeType;
+            }
         } else {
             readerStatus = getString(R.string.dashboard_reader_status_empty, formatBytes(readerSnapshot.usedMemoryBytes));
         }
@@ -133,13 +137,34 @@ public class ActivityWebSocketDashboard extends AppCompatActivity {
         String scanLoginStatus = scanLoginRunning ? getString(R.string.dashboard_status_running_simple) : getString(R.string.dashboard_status_stopped);
         String loginUrl = webSocketService != null ? webSocketService.getWebLoginUrl() : null;
         if (scanLoginRunning && loginUrl != null && !loginUrl.isEmpty()) {
-            WebHttpRouter.FileTransferClientSnapshot snapshot = WebHttpRouter.getLatestFileTransferClientSnapshot();
-            if (snapshot != null) {
-                String computerName = buildComputerName(snapshot);
-                int summaryRes = snapshot.authenticated
-                        ? R.string.dashboard_file_transfer_connected
-                        : R.string.dashboard_file_transfer_pending_client;
-                scanLoginStatus = loginUrl + "\n" + getString(summaryRes, computerName);
+            List<WebHttpRouter.FileTransferClientSnapshot> snapshots = WebHttpRouter.getFileTransferClientSnapshots();
+            if (!snapshots.isEmpty()) {
+                int connectedCount = 0;
+                int pendingCount = 0;
+                for (WebHttpRouter.FileTransferClientSnapshot snapshot : snapshots) {
+                    if (snapshot.authenticated) {
+                        connectedCount++;
+                    } else {
+                        pendingCount++;
+                    }
+                }
+                StringBuilder builder = new StringBuilder(loginUrl)
+                        .append('\n')
+                        .append(getString(R.string.dashboard_file_transfer_client_counts, connectedCount, pendingCount));
+                int previewCount = Math.min(3, snapshots.size());
+                for (int i = 0; i < previewCount; i++) {
+                    WebHttpRouter.FileTransferClientSnapshot snapshot = snapshots.get(i);
+                    builder.append('\n').append(getString(
+                            R.string.dashboard_file_transfer_client_line,
+                            buildComputerName(snapshot),
+                            buildClientStateLabel(snapshot)));
+                }
+                if (snapshots.size() > previewCount) {
+                    builder.append('\n').append(getString(
+                            R.string.dashboard_file_transfer_more_clients,
+                            snapshots.size() - previewCount));
+                }
+                scanLoginStatus = builder.toString();
             } else {
                 WebHttpRouter.PendingWebLoginInfo pendingInfo = WebHttpRouter.getLatestPendingWebLoginInfo();
                 scanLoginStatus = loginUrl + "\n" + getString(
@@ -183,6 +208,17 @@ public class ActivityWebSocketDashboard extends AppCompatActivity {
             return browser;
         }
         return browser + " / " + platform;
+    }
+
+    @NonNull
+    private String buildClientStateLabel(@NonNull WebHttpRouter.FileTransferClientSnapshot snapshot) {
+        String state = snapshot.authenticated
+                ? getString(R.string.file_transfer_stats_state_connected)
+                : getString(R.string.file_transfer_stats_state_waiting_confirm);
+        String address = snapshot.remoteAddress != null && !snapshot.remoteAddress.trim().isEmpty()
+                ? snapshot.remoteAddress.trim()
+                : getString(R.string.reader_stats_empty_value);
+        return String.format(Locale.US, "%s - %s", state, address);
     }
 
     @NonNull

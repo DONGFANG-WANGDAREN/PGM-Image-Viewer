@@ -79,7 +79,11 @@ public class ActivityReaderStats extends AppCompatActivity {
         rows.add(new Row(RowType.STAT, getString(R.string.reader_stats_file_path),
                 snapshot.opened && !snapshot.filePath.isEmpty() ? snapshot.filePath : getString(R.string.reader_stats_empty_value)));
         rows.add(new Row(RowType.STAT, getString(R.string.reader_stats_file_type),
-                snapshot.opened ? snapshot.openModeLabel : getString(R.string.reader_stats_empty_value)));
+                snapshot.opened ? snapshot.detailedTypeLabel : getString(R.string.reader_stats_empty_value)));
+        rows.add(new Row(RowType.STAT, getString(R.string.reader_stats_file_extension),
+                snapshot.opened ? extractExtension(snapshot.fileName) : getString(R.string.reader_stats_empty_value)));
+        rows.add(new Row(RowType.STAT, getString(R.string.reader_stats_mime_type),
+                snapshot.opened && !snapshot.mimeType.isEmpty() ? snapshot.mimeType : getString(R.string.reader_stats_empty_value)));
         rows.add(new Row(RowType.STAT, getString(R.string.reader_stats_file_size), formatBytes(snapshot.fileSizeBytes)));
 
         rows.add(new Row(RowType.HEADER, getString(R.string.reader_stats_header_memory)));
@@ -97,6 +101,15 @@ public class ActivityReaderStats extends AppCompatActivity {
         }
         double ratio = usedBytes * 100.0 / totalBytes;
         return String.format(Locale.US, "%.2f%%", ratio);
+    }
+
+    @NonNull
+    private String extractExtension(@NonNull String fileName) {
+        int index = fileName.lastIndexOf('.');
+        if (index < 0 || index >= fileName.length() - 1) {
+            return getString(R.string.reader_stats_empty_value);
+        }
+        return "." + fileName.substring(index + 1).toLowerCase(Locale.US);
     }
 
     @NonNull

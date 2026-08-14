@@ -67,7 +67,7 @@ public class ActivityFileTransferStats extends AppCompatActivity {
 
         RecyclerView recyclerView = findViewById(R.id.recycler_view_stats);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        adapter = new StatsAdapter(rows);
+        adapter = new StatsAdapter(rows, this::openClientDetails);
         recyclerView.setAdapter(adapter);
 
         bindToService();
@@ -108,52 +108,75 @@ public class ActivityFileTransferStats extends AppCompatActivity {
 
         boolean running = webSocketService != null && webSocketService.isRunning();
         String loginUrl = running && webSocketService != null ? webSocketService.getWebLoginUrl() : null;
-        WebHttpRouter.FileTransferClientSnapshot snapshot = WebHttpRouter.getLatestFileTransferClientSnapshot();
+        List<WebHttpRouter.FileTransferClientSnapshot> snapshots = WebHttpRouter.getFileTransferClientSnapshots();
+        int connectedCount = 0;
+        int pendingCount = 0;
+        for (WebHttpRouter.FileTransferClientSnapshot snapshot : snapshots) {
+            if (snapshot.authenticated) {
+                connectedCount++;
+            } else {
+                pendingCount++;
+            }
+        }
 
         rows.add(new Row(RowType.HEADER, getString(R.string.stats_header_service)));
         rows.add(new Row(RowType.STAT, getString(R.string.stats_status),
                 getString(running ? R.string.stats_running : R.string.stats_stopped)));
         rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_login_url),
                 loginUrl != null && !loginUrl.isEmpty() ? loginUrl : getString(R.string.reader_stats_empty_value)));
-        rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_connection_state), buildConnectionState(snapshot)));
+        rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_connection_state),
+                buildOverallConnectionState(snapshots)));
+        rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_client_count), String.valueOf(connectedCount)));
+        rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_pending_count), String.valueOf(pendingCount)));
 
-        rows.add(new Row(RowType.HEADER, getString(R.string.file_transfer_stats_header_computer)));
-        if (snapshot == null) {
-            rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_computer), getString(R.string.file_transfer_stats_no_client)));
+        rows.add(new Row(RowType.HEADER, getString(R.string.file_transfer_stats_header_clients)));
+        if (snapshots.isEmpty()) {
+            rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_computer),
+                    getString(R.string.file_transfer_stats_no_clients)));
         } else {
-            rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_computer), buildComputerName(snapshot)));
-            rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_browser),
-                    valueOrDefault(snapshot.browserName)));
-            rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_system),
-                    valueOrDefault(snapshot.platform)));
-            rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_language),
-                    valueOrDefault(snapshot.language)));
-            rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_timezone),
-                    valueOrDefault(snapshot.timezone)));
-            rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_resolution),
-                    formatResolution(snapshot.screenWidth, snapshot.screenHeight)));
-            rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_ip),
-                    valueOrDefault(snapshot.remoteAddress)));
-            rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_page),
-                    valueOrDefault(snapshot.currentPage)));
-            rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_created_at),
-                    formatTimestamp(snapshot.createdAt)));
-            rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_last_seen),
-                    formatLastSeen(snapshot.lastSeenAt)));
-            if (snapshot.authenticatedAt > 0) {
-                rows.add(new Row(RowType.STAT, getString(R.string.file_transfer_stats_confirmed_at),
-                        formatTimestamp(snapshot.authenticatedAt)));
+            for (WebHttpRouter.FileTransferClientSnapshot snapshot : snapshots) {
+                rows.add(Row.forClient(
+                        buildComputerName(snapshot),
+                        buildClientSummary(snapshot),
+                        snapshot.sessionId
+                ));
             }
         }
 
         adapter.notifyDataSetChanged();
     }
 
+    private void openClientDetails(@NonNull String sessionId) {
+        Intent intent = new Intent(this, ActivityFileTransferClientDetails.class);
+        intent.putExtra(ActivityFileTransferClientDetails.EXTRA_SESSION_ID, sessionId);
+        startActivity(intent);
+    }
+
     @NonNull
-    private String buildConnectionState(@Nullable WebHttpRouter.FileTransferClientSnapshot snapshot) {
-        if (snapshot == null) {
+    private String buildOverallConnectionState(@NonNull List<WebHttpRouter.FileTransferClientSnapshot> snapshots) {
+        if (snapshots.isEmpty()) {
             return getString(R.string.file_transfer_stats_no_client);
         }
+        for (WebHttpRouter.FileTransferClientSnapshot snapshot : snapshots) {
+            if (snapshot.authenticated) {
+                return getString(R.string.file_transfer_stats_state_connected);
+            }
+        }
+        return getString(R.string.file_transfer_stats_state_waiting_confirm);
+    }
+
+    @NonNull
+    private String buildClientSummary(@NonNull WebHttpRouter.FileTransferClientSnapshot snapshot) {
+        return getString(
+                R.string.file_transfer_stats_client_summary,
+                buildConnectionState(snapshot),
+                valueOrDefault(snapshot.remoteAddress),
+                formatLastSeen(snapshot.lastSeenAt)
+        );
+    }
+
+    @NonNull
+    private String buildConnectionState(@NonNull WebHttpRouter.FileTransferClientSnapshot snapshot) {
         if (snapshot.authenticated) {
             return getString(R.string.file_transfer_stats_state_connected);
         }
@@ -179,14 +202,6 @@ public class ActivityFileTransferStats extends AppCompatActivity {
     @NonNull
     private String valueOrDefault(@Nullable String value) {
         return value != null && !value.trim().isEmpty() ? value.trim() : getString(R.string.reader_stats_empty_value);
-    }
-
-    @NonNull
-    private String formatResolution(int width, int height) {
-        if (width <= 0 || height <= 0) {
-            return getString(R.string.reader_stats_empty_value);
-        }
-        return width + " x " + height;
     }
 
     @NonNull
@@ -228,36 +243,55 @@ public class ActivityFileTransferStats extends AppCompatActivity {
         final String label;
         @Nullable
         final String value;
+        @Nullable
+        final String sessionId;
 
         Row(@NonNull RowType type, @NonNull String label) {
-            this(type, label, null);
+            this(type, label, null, null);
         }
 
         Row(@NonNull RowType type, @NonNull String label, @Nullable String value) {
+            this(type, label, value, null);
+        }
+
+        Row(@NonNull RowType type, @NonNull String label, @Nullable String value, @Nullable String sessionId) {
             this.type = type;
             this.label = label;
             this.value = value;
+            this.sessionId = sessionId;
+        }
+
+        static Row forClient(@NonNull String label, @NonNull String value, @NonNull String sessionId) {
+            return new Row(RowType.CLIENT, label, value, sessionId);
         }
     }
 
     private enum RowType {
-        HEADER, STAT
+        HEADER, STAT, CLIENT
     }
 
     private static final class StatsAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         private static final int VIEW_TYPE_HEADER = 0;
         private static final int VIEW_TYPE_STAT = 1;
+        private static final int VIEW_TYPE_CLIENT = 2;
 
         @NonNull
         private final List<Row> rows;
+        @NonNull
+        private final OnClientClickListener listener;
 
-        StatsAdapter(@NonNull List<Row> rows) {
+        StatsAdapter(@NonNull List<Row> rows, @NonNull OnClientClickListener listener) {
             this.rows = rows;
+            this.listener = listener;
         }
 
         @Override
         public int getItemViewType(int position) {
-            return rows.get(position).type == RowType.HEADER ? VIEW_TYPE_HEADER : VIEW_TYPE_STAT;
+            RowType type = rows.get(position).type;
+            if (type == RowType.HEADER) {
+                return VIEW_TYPE_HEADER;
+            }
+            return type == RowType.CLIENT ? VIEW_TYPE_CLIENT : VIEW_TYPE_STAT;
         }
 
         @NonNull
@@ -275,8 +309,16 @@ public class ActivityFileTransferStats extends AppCompatActivity {
             Row row = rows.get(position);
             if (holder instanceof HeaderViewHolder) {
                 ((HeaderViewHolder) holder).bind(row.label);
+                return;
+            }
+            StatViewHolder statHolder = (StatViewHolder) holder;
+            statHolder.bind(row.label, row.value);
+            if (row.type == RowType.CLIENT && row.sessionId != null) {
+                statHolder.itemView.setClickable(true);
+                statHolder.itemView.setOnClickListener(view -> listener.onClientClick(row.sessionId));
             } else {
-                ((StatViewHolder) holder).bind(row.label, row.value);
+                statHolder.itemView.setClickable(false);
+                statHolder.itemView.setOnClickListener(null);
             }
         }
 
@@ -316,5 +358,9 @@ public class ActivityFileTransferStats extends AppCompatActivity {
                 valueView.setText(value);
             }
         }
+    }
+
+    private interface OnClientClickListener {
+        void onClientClick(@NonNull String sessionId);
     }
 }

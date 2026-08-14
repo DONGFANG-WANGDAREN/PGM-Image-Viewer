@@ -5,15 +5,12 @@ import com.DONGFANG_WANGDAREN.Station_RX.R;
 import com.DONGFANG_WANGDAREN.Station_RX.app.AppConfig;
 import com.DONGFANG_WANGDAREN.Station_RX.app.AppLogger;
 import com.DONGFANG_WANGDAREN.Station_RX.reader.ParserPicturePgm;
-import com.DONGFANG_WANGDAREN.Station_RX.reader.ReaderDocumentDocx;
-import com.DONGFANG_WANGDAREN.Station_RX.reader.ReaderTableExcel;
 import com.DONGFANG_WANGDAREN.Station_RX.reader.ReaderTextPlain;
 import com.DONGFANG_WANGDAREN.Station_RX.storage.AppStoragePaths;
 import com.DONGFANG_WANGDAREN.Station_RX.ui.view.ViewPictureZoom;
+import android.content.Context;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -36,6 +33,7 @@ import android.text.style.StyleSpan;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.EditText;
@@ -93,24 +91,22 @@ import javax.xml.transform.stream.StreamSource;
 public class ActivityPictureViewer extends AppCompatActivity {
 
     private static final String TAG = "ActivityPictureViewer";
+    public static final String EXTRA_OPEN_BUNDLED_README = "open_bundled_readme";
+    private static final String BUNDLED_README_ASSET_PATH = "docs/app_readme.md";
     private static final String OPEN_MODE_PGM = "pgm";
     private static final String OPEN_MODE_TEXT = "text";
-    private static final String OPEN_MODE_DOCX = "docx";
     private static final String OPEN_MODE_IMAGE = "image";
     private static final String OPEN_MODE_VIDEO = "video";
     private static final String OPEN_MODE_AUDIO = "audio";
     private static final String OPEN_MODE_PDF = "pdf";
-    private static final String OPEN_MODE_SPREADSHEET = "spreadsheet";
-    private static final String OPEN_MODE_INSTALLER_APK = "installer_apk";
-    private static final String OPEN_MODE_INSTALLER_BLOCKED = "installer_blocked";
-    private static final String OPEN_MODE_EXTERNAL = "external";
     private static final String OPEN_MODE_UNSUPPORTED = "unsupported";
+    private static final float HISTORY_EDGE_SWIPE_WIDTH_DP = 32f;
     private static final String JSON_KEY_URI = "uri";
     private static final String JSON_KEY_FILE_NAME = "file_name";
     private static final String JSON_KEY_FILE_PATH = "file_path";
     private static final String JSON_KEY_FILE_SIZE = "file_size";
     @NonNull
-    private static volatile ReaderDashboardSnapshot readerDashboardSnapshot = new ReaderDashboardSnapshot("", "", "", -1, 0, 0, false);
+    private static volatile ReaderDashboardSnapshot readerDashboardSnapshot = new ReaderDashboardSnapshot("", "", "", "", "", -1, 0, 0, false);
     private ActivityResultLauncher<String[]> launcherOpenDocument;
     private ActivityResultLauncher<Intent> launcherManageAllFilesAccess;
     private MaterialButton buttonOpenPgm;
@@ -159,6 +155,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private int currentOpenRequestId = 0;
     private String currentFileName = "";
     private String currentFilePath = "";
+    private String currentMimeType = "";
     @Nullable
     private Uri currentOpenedFileUri;
     private String currentOpenMode = OPEN_MODE_UNSUPPORTED;
@@ -170,6 +167,11 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private boolean startupIntentHandled;
     private float currentTextSizeSp = AppConfig.get().getDefaultTextSizeSp();
     private long currentFileSizeBytes = -1;
+    private float historySwipeStartX;
+    private float historySwipeStartY;
+    private boolean historySwipeTracking;
+    private int historySwipeTriggerDistancePx;
+    private int historySwipeEdgeWidthPx;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -242,6 +244,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
         viewHistoryScrim = findViewById(R.id.view_history_scrim);
         buttonOpenHistory = findViewById(R.id.button_open_history);
         layoutInflater = LayoutInflater.from(this);
+        historySwipeTriggerDistancePx = ViewConfiguration.get(this).getScaledTouchSlop() * 3;
+        historySwipeEdgeWidthPx = Math.round(getResources().getDisplayMetrics().density * HISTORY_EDGE_SWIPE_WIDTH_DP);
 
         WebSettings webSettings = webViewMarkdownPreview.getSettings();
         webSettings.setBuiltInZoomControls(false);
@@ -299,6 +303,14 @@ public class ActivityPictureViewer extends AppCompatActivity {
     }
 
     @Override
+    public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
+        if (handleHistoryEdgeSwipe(event)) {
+            return true;
+        }
+        return super.dispatchTouchEvent(event);
+    }
+
+    @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
@@ -315,8 +327,23 @@ public class ActivityPictureViewer extends AppCompatActivity {
         }
     }
 
+    @NonNull
+    public static Intent createOpenBundledReadmeIntent(@NonNull Context context) {
+        Intent intent = new Intent(context, ActivityPictureViewer.class);
+        intent.putExtra(EXTRA_OPEN_BUNDLED_README, true);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        return intent;
+    }
+
     private void handleIncomingIntent(@Nullable Intent intent) {
-        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) {
+        if (intent == null) {
+            return;
+        }
+        if (intent.getBooleanExtra(EXTRA_OPEN_BUNDLED_README, false)) {
+            openBundledReadme();
+            return;
+        }
+        if (!Intent.ACTION_VIEW.equals(intent.getAction())) {
             return;
         }
         Uri uri = intent.getData();
@@ -344,6 +371,41 @@ public class ActivityPictureViewer extends AppCompatActivity {
         AppLogger.refreshStorageLocation(this);
         startupIntentHandled = true;
         handleIncomingIntent(getIntent());
+    }
+
+    private boolean handleHistoryEdgeSwipe(@NonNull MotionEvent event) {
+        if (layoutHistoryPanel == null || viewHistoryScrim == null || layoutHistoryPanel.getVisibility() == View.VISIBLE) {
+            historySwipeTracking = false;
+            return false;
+        }
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                historySwipeTracking = event.getX() <= historySwipeEdgeWidthPx;
+                historySwipeStartX = event.getX();
+                historySwipeStartY = event.getY();
+                return false;
+            case MotionEvent.ACTION_MOVE:
+                if (!historySwipeTracking) {
+                    return false;
+                }
+                float deltaX = event.getX() - historySwipeStartX;
+                float deltaY = event.getY() - historySwipeStartY;
+                if (deltaX > historySwipeTriggerDistancePx && deltaX > Math.abs(deltaY)) {
+                    setHistoryPanelVisible(true);
+                    historySwipeTracking = false;
+                    return true;
+                }
+                if (Math.abs(deltaY) > historySwipeTriggerDistancePx || deltaX < -historySwipeTriggerDistancePx) {
+                    historySwipeTracking = false;
+                }
+                return false;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                historySwipeTracking = false;
+                return false;
+            default:
+                return false;
+        }
     }
 
     private boolean hasAllFilesAccessPermission() {
@@ -394,52 +456,23 @@ public class ActivityPictureViewer extends AppCompatActivity {
 
         String mimeType = getNormalizedMimeType(uri);
         String openMode = resolveOpenMode(fileName, mimeType);
-        if (OPEN_MODE_UNSUPPORTED.equals(openMode) && shouldProbeDocx(fileName, mimeType)) {
-            openMode = detectOpenModeFromContent(uri, openMode);
-        }
         AppLogger.i(TAG, "Open requested. name=" + fileName + ", mime=" + String.valueOf(mimeType) + ", mode=" + openMode + ", uri=" + uri);
-
-        if (OPEN_MODE_UNSUPPORTED.equals(openMode)) {
-            showToast(R.string.toast_only_supported_file);
-            return;
-        }
+        currentMimeType = mimeType == null ? "" : mimeType;
 
         long fileSize = getFileSize(uri);
 
         try {
             verifyFileExists(uri);
-            if (OPEN_MODE_INSTALLER_APK.equals(openMode)) {
-                updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
-                updateCurrentFileInfo(fileName, filePath, fileSize);
-                if (saveToHistory) {
-                    recordHistory(uri.toString(), fileName, filePath, fileSize);
-                }
-                showApkInstallDialog(uri);
+            if (OPEN_MODE_UNSUPPORTED.equals(openMode)) {
+                showUnsupportedFileState(fileName, filePath, fileSize);
                 return;
             }
-            if (OPEN_MODE_INSTALLER_BLOCKED.equals(openMode)) {
-                updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
-                showToast(R.string.toast_installer_unsupported);
+            if (OPEN_MODE_TEXT.equals(openMode) && isTextFileTooLarge(fileSize)) {
+                showTextFileTooLargeState(fileName, filePath, fileSize);
                 return;
             }
-            if (shouldOfferDocumentChoice(openMode)) {
-                if (hasExternalViewer(uri, mimeType)) {
-                    showDocumentOpenChoiceDialog(uri, mimeType, fileName, filePath, openMode, saveToHistory, promptDeleteOnMissing, fileSize);
-                    return;
-                }
+            if (OPEN_MODE_PDF.equals(openMode)) {
                 performInAppOpen(uri, fileName, filePath, openMode, saveToHistory, promptDeleteOnMissing, fileSize);
-                return;
-            }
-            if (OPEN_MODE_EXTERNAL.equals(openMode)) {
-                if (!openWithExternalApp(uri, mimeType)) {
-                    showToast(R.string.toast_no_external_viewer);
-                    return;
-                }
-                updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
-                updateCurrentFileInfo(fileName, filePath, fileSize);
-                if (saveToHistory) {
-                    recordHistory(uri.toString(), fileName, filePath, fileSize);
-                }
                 return;
             }
         } catch (FileNotFoundException exception) {
@@ -457,6 +490,26 @@ public class ActivityPictureViewer extends AppCompatActivity {
         }
 
         openFileInBackground(uri, fileName, filePath, openMode, saveToHistory, promptDeleteOnMissing, fileSize);
+    }
+
+    private void openBundledReadme() {
+        try (InputStream inputStream = getAssets().open(BUNDLED_README_ASSET_PATH)) {
+            String readmeText = ReaderTextPlain.readUtf8(inputStream);
+            setHistoryPanelVisible(false);
+            setOpenUiEnabled(true);
+            updateCurrentOpenTarget(null, OPEN_MODE_TEXT);
+            currentMimeType = "text/markdown";
+            updateCurrentFileInfo(
+                    getString(R.string.about_app_readme_file_name),
+                    getString(R.string.about_app_readme_file_path),
+                    readmeText.getBytes(StandardCharsets.UTF_8).length
+            );
+            showTextContent(readmeText, false);
+            AppLogger.i(TAG, "Opened bundled README.");
+        } catch (IOException exception) {
+            AppLogger.e(TAG, "Failed to open bundled README.", exception);
+            showToast(R.string.toast_open_failed);
+        }
     }
 
     private void performInAppOpen(
@@ -496,57 +549,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
         openFileInBackground(uri, fileName, filePath, openMode, saveToHistory, promptDeleteOnMissing, fileSize);
     }
 
-    private void showDocumentOpenChoiceDialog(
-            @NonNull Uri uri,
-            @Nullable String mimeType,
-            @NonNull String fileName,
-            @NonNull String filePath,
-            @NonNull String openMode,
-            boolean saveToHistory,
-            boolean promptDeleteOnMissing,
-            long fileSize
-    ) {
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.dialog_document_open_title)
-                .setMessage(R.string.dialog_document_open_message)
-                .setPositiveButton(R.string.dialog_open_in_app, (dialog, which) ->
-                        performInAppOpen(uri, fileName, filePath, openMode, saveToHistory, promptDeleteOnMissing, fileSize))
-                .setNegativeButton(R.string.dialog_open_in_system, (dialog, which) -> {
-                    if (!openWithExternalApp(uri, mimeType)) {
-                        showToast(R.string.toast_no_external_viewer);
-                        return;
-                    }
-                    updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
-                    updateCurrentFileInfo(fileName, filePath, fileSize);
-                    if (saveToHistory) {
-                        recordHistory(uri.toString(), fileName, filePath, fileSize);
-                    }
-                })
-                .show();
-    }
-
-    private void showApkInstallDialog(@NonNull Uri uri) {
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.dialog_apk_install_title)
-                .setMessage(R.string.dialog_apk_install_message)
-                .setPositiveButton(R.string.dialog_yes, (dialog, which) -> launchApkInstaller(uri))
-                .setNegativeButton(R.string.dialog_no, null)
-                .show();
-    }
-
-    private void launchApkInstaller(@NonNull Uri uri) {
-        Intent intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
-        intent.setData(uri);
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        try {
-            startActivity(intent);
-        } catch (ActivityNotFoundException exception) {
-            AppLogger.e(TAG, "Failed to launch APK installer.", exception);
-            showToast(R.string.toast_install_apk_failed);
-        }
-    }
-
     @NonNull
     static String resolveOpenMode(@Nullable String fileName, @Nullable String mimeType) {
         String openModeFromName = resolveOpenModeFromName(fileName);
@@ -569,14 +571,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
         if (matchesExtension(normalizedFileName, ".pgm", ".pmg")) {
             return OPEN_MODE_PGM;
         }
-        if (matchesExtension(normalizedFileName, ".docx")) {
-            return OPEN_MODE_DOCX;
-        }
         if (matchesExtension(normalizedFileName, ".pdf")) {
             return OPEN_MODE_PDF;
-        }
-        if (matchesExtension(normalizedFileName, ".xls", ".xlsx")) {
-            return OPEN_MODE_SPREADSHEET;
         }
         if (matchesExtension(
                 normalizedFileName,
@@ -604,18 +600,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
         )) {
             return OPEN_MODE_AUDIO;
         }
-        if (matchesExtension(normalizedFileName, ".apk")) {
-            return OPEN_MODE_INSTALLER_APK;
-        }
-        if (matchesExtension(normalizedFileName, ".ipa", ".exe", ".msi", ".dmg", ".pkg", ".deb", ".rpm")) {
-            return OPEN_MODE_INSTALLER_BLOCKED;
-        }
-        if (matchesExtension(
-                normalizedFileName,
-                ".doc", ".ppt", ".pptx", ".wps", ".odt", ".ods", ".odp", ".rtf"
-        )) {
-            return OPEN_MODE_EXTERNAL;
-        }
         return null;
     }
 
@@ -630,15 +614,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
                 || "image/x-portable-anymap".equals(normalizedMimeType)) {
             return OPEN_MODE_PGM;
         }
-        if ("application/vnd.openxmlformats-officedocument.wordprocessingml.document".equals(normalizedMimeType)) {
-            return OPEN_MODE_DOCX;
-        }
         if ("application/pdf".equals(normalizedMimeType)) {
             return OPEN_MODE_PDF;
-        }
-        if ("application/vnd.ms-excel".equals(normalizedMimeType)
-                || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".equals(normalizedMimeType)) {
-            return OPEN_MODE_SPREADSHEET;
         }
         if (normalizedMimeType.startsWith("text/")
                 || "application/json".equals(normalizedMimeType)
@@ -662,27 +639,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
                 || "application/ogg".equals(normalizedMimeType)) {
             return OPEN_MODE_AUDIO;
         }
-        if ("application/vnd.android.package-archive".equals(normalizedMimeType)) {
-            return OPEN_MODE_INSTALLER_APK;
-        }
-        if ("application/x-msdownload".equals(normalizedMimeType)
-                || "application/x-apple-diskimage".equals(normalizedMimeType)) {
-            return OPEN_MODE_INSTALLER_BLOCKED;
-        }
-        if ("application/msword".equals(normalizedMimeType)
-                || "application/vnd.ms-powerpoint".equals(normalizedMimeType)
-                || "application/vnd.openxmlformats-officedocument.presentationml.presentation".equals(normalizedMimeType)
-                || "application/rtf".equals(normalizedMimeType)
-                || normalizedMimeType.startsWith("application/vnd.")) {
-            return OPEN_MODE_EXTERNAL;
-        }
         return null;
-    }
-
-    private boolean shouldOfferDocumentChoice(@NonNull String openMode) {
-        return OPEN_MODE_PDF.equals(openMode)
-                || OPEN_MODE_DOCX.equals(openMode)
-                || OPEN_MODE_SPREADSHEET.equals(openMode);
     }
 
     private void showBitmap(@NonNull Bitmap bitmap) {
@@ -719,6 +676,52 @@ public class ActivityPictureViewer extends AppCompatActivity {
         exoPlayer.prepare();
         exoPlayer.play();
         setTextQuickScrollVisible(false);
+    }
+
+    private void showUnsupportedFileState(
+            @NonNull String fileName,
+            @NonNull String filePath,
+            long fileSize
+    ) {
+        setOpenUiEnabled(true);
+        updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
+        updateCurrentFileInfo(fileName, filePath, fileSize);
+        stopMediaPlayback();
+        updateTextLargeWarningVisible(false);
+        setTextSearchVisible(false);
+        setTextActionsVisible(false);
+        viewPictureZoom.setImageDrawable(null);
+        viewPictureZoom.setVisibility(View.GONE);
+        scrollViewText.setVisibility(View.GONE);
+        webViewMarkdownPreview.setVisibility(View.GONE);
+        playerViewFile.setVisibility(View.GONE);
+        setTextQuickScrollVisible(false);
+        layoutEmptyState.setVisibility(View.VISIBLE);
+        textViewEmptyTitle.setText(R.string.unsupported_file_title);
+        textViewEmptyMessage.setText(R.string.unsupported_file_message);
+    }
+
+    private void showTextFileTooLargeState(
+            @NonNull String fileName,
+            @NonNull String filePath,
+            long fileSize
+    ) {
+        setOpenUiEnabled(true);
+        updateCurrentOpenTarget(null, OPEN_MODE_UNSUPPORTED);
+        updateCurrentFileInfo(fileName, filePath, fileSize);
+        stopMediaPlayback();
+        updateTextLargeWarningVisible(false);
+        setTextSearchVisible(false);
+        setTextActionsVisible(false);
+        viewPictureZoom.setImageDrawable(null);
+        viewPictureZoom.setVisibility(View.GONE);
+        scrollViewText.setVisibility(View.GONE);
+        webViewMarkdownPreview.setVisibility(View.GONE);
+        playerViewFile.setVisibility(View.GONE);
+        setTextQuickScrollVisible(false);
+        layoutEmptyState.setVisibility(View.VISIBLE);
+        textViewEmptyTitle.setText(R.string.text_file_too_large_title);
+        textViewEmptyMessage.setText(R.string.text_file_too_large_message);
     }
 
     @NonNull
@@ -928,6 +931,9 @@ public class ActivityPictureViewer extends AppCompatActivity {
         currentFileName = fileName == null ? "" : fileName;
         currentFilePath = filePath == null ? "" : filePath;
         currentFileSizeBytes = fileSize;
+        if (currentFileName.isEmpty()) {
+            currentMimeType = "";
+        }
         if (isNullOrEmpty(fileName)) {
             textViewCurrentFileTitle.setText(R.string.current_file_default_title);
         } else {
@@ -1000,6 +1006,7 @@ public class ActivityPictureViewer extends AppCompatActivity {
         String normalizedName = fileName == null ? "" : fileName;
         String normalizedPath = filePath == null ? "" : filePath;
         String openModeLabel = mapOpenModeLabel(currentOpenMode);
+        String detailedTypeLabel = buildDetailedFileTypeLabel(normalizedName, currentOpenMode, currentMimeType);
         long usedMemoryBytes = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
         long maxHeapBytes = Runtime.getRuntime().maxMemory();
         boolean opened = !isNullOrEmpty(normalizedName);
@@ -1007,6 +1014,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
                 normalizedName,
                 normalizedPath,
                 openModeLabel,
+                detailedTypeLabel,
+                currentMimeType,
                 fileSize,
                 usedMemoryBytes,
                 maxHeapBytes,
@@ -1018,11 +1027,9 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private String mapOpenModeLabel(@NonNull String openMode) {
         switch (openMode) {
             case OPEN_MODE_PGM:
-                return "PGM";
+                return "Image";
             case OPEN_MODE_TEXT:
                 return "Text";
-            case OPEN_MODE_DOCX:
-                return "DOCX";
             case OPEN_MODE_IMAGE:
                 return "Image";
             case OPEN_MODE_VIDEO:
@@ -1031,13 +1038,111 @@ public class ActivityPictureViewer extends AppCompatActivity {
                 return "Audio";
             case OPEN_MODE_PDF:
                 return "PDF";
-            case OPEN_MODE_SPREADSHEET:
-                return "Spreadsheet";
-            case OPEN_MODE_EXTERNAL:
-                return "External";
             default:
                 return "Unknown";
         }
+    }
+
+    @NonNull
+    private String buildDetailedFileTypeLabel(
+            @NonNull String fileName,
+            @NonNull String openMode,
+            @Nullable String mimeType
+    ) {
+        String extension = getFileExtension(fileName);
+        String normalizedExtension = extension.toLowerCase(Locale.US);
+        switch (normalizedExtension) {
+            case "txt":
+                return "Plain Text (.txt)";
+            case "json":
+                return "JSON Text (.json)";
+            case "xml":
+                return "XML Text (.xml)";
+            case "yaml":
+            case "yml":
+                return "YAML Text (." + normalizedExtension + ")";
+            case "md":
+            case "markdown":
+                return "Markdown Document (." + normalizedExtension + ")";
+            case "csv":
+                return "CSV Text (.csv)";
+            case "log":
+                return "Log Text (.log)";
+            case "html":
+            case "htm":
+                return "HTML Document (." + normalizedExtension + ")";
+            case "js":
+                return "JavaScript Source (.js)";
+            case "ts":
+                return "TypeScript Source (.ts)";
+            case "java":
+                return "Java Source (.java)";
+            case "kt":
+            case "kts":
+                return "Kotlin Source (." + normalizedExtension + ")";
+            case "swift":
+                return "Swift Source (.swift)";
+            case "jpg":
+            case "jpeg":
+                return "JPEG Image (." + normalizedExtension + ")";
+            case "png":
+                return "PNG Image (.png)";
+            case "bmp":
+                return "Bitmap Image (.bmp)";
+            case "webp":
+                return "WebP Image (.webp)";
+            case "gif":
+                return "GIF Image (.gif)";
+            case "heic":
+            case "heif":
+                return "HEIF Image (." + normalizedExtension + ")";
+            case "pgm":
+            case "pmg":
+                return "PGM Image (." + normalizedExtension + ")";
+            case "mp4":
+            case "m4v":
+            case "mov":
+            case "mkv":
+            case "webm":
+            case "avi":
+            case "3gp":
+            case "mpeg":
+            case "mpg":
+                return "Video File (." + normalizedExtension + ")";
+            case "mp3":
+            case "wav":
+            case "flac":
+            case "m4a":
+            case "aac":
+            case "ogg":
+            case "opus":
+            case "amr":
+            case "wma":
+                return "Audio File (." + normalizedExtension + ")";
+            case "pdf":
+                return "PDF Document (.pdf)";
+            default:
+                break;
+        }
+        if (!normalizedExtension.isEmpty()) {
+            return mapOpenModeLabel(openMode) + " File (." + normalizedExtension + ")";
+        }
+        if (mimeType != null && !mimeType.trim().isEmpty()) {
+            return mapOpenModeLabel(openMode) + " File (" + mimeType.trim() + ")";
+        }
+        return mapOpenModeLabel(openMode);
+    }
+
+    @NonNull
+    private String getFileExtension(@Nullable String fileName) {
+        if (fileName == null) {
+            return "";
+        }
+        int index = fileName.lastIndexOf('.');
+        if (index < 0 || index >= fileName.length() - 1) {
+            return "";
+        }
+        return fileName.substring(index + 1);
     }
 
     @NonNull
@@ -1324,6 +1429,10 @@ public class ActivityPictureViewer extends AppCompatActivity {
         }
     }
 
+    private boolean isTextFileTooLarge(long fileSize) {
+        return fileSize > 0 && fileSize > AppConfig.get().getMaxTextDisplayBytes();
+    }
+
     private boolean isActiveOpenRequest(int requestId) {
         return !isFinishing() && requestId == currentOpenRequestId;
     }
@@ -1357,12 +1466,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
                     throw new IOException("Failed to decode bitmap.");
                 }
                 return OpenedFileContent.forBitmap(bitmap);
-            }
-            if (OPEN_MODE_DOCX.equals(openMode)) {
-                return OpenedFileContent.forText(new ReaderTextPlain.PreviewTextResult(ReaderDocumentDocx.readText(inputStream), false));
-            }
-            if (OPEN_MODE_SPREADSHEET.equals(openMode)) {
-                return OpenedFileContent.forText(ReaderTableExcel.readAll(inputStream, fileName));
             }
             if (OPEN_MODE_TEXT.equals(openMode)) {
                 return OpenedFileContent.forText(ReaderTextPlain.readUtf8Preview(inputStream, Integer.MAX_VALUE));
@@ -1434,81 +1537,6 @@ public class ActivityPictureViewer extends AppCompatActivity {
     private String getNormalizedMimeType(@NonNull Uri uri) {
         String mimeType = getContentResolver().getType(uri);
         return mimeType == null ? null : mimeType.toLowerCase(Locale.US);
-    }
-
-    @NonNull
-    private String detectOpenModeFromContent(@NonNull Uri uri, @NonNull String fallbackOpenMode) {
-        try (InputStream inputStream = getContentResolver().openInputStream(uri)) {
-            if (inputStream != null && ReaderDocumentDocx.isDocxFile(inputStream)) {
-                return OPEN_MODE_DOCX;
-            }
-        } catch (IOException | SecurityException ignored) {
-        }
-        return fallbackOpenMode;
-    }
-
-    private boolean shouldProbeDocx(@Nullable String fileName, @Nullable String mimeType) {
-        if (fileName != null && fileName.toLowerCase(Locale.US).endsWith(".docx")) {
-            return false;
-        }
-        return mimeType == null || mimeType.isEmpty() || "application/octet-stream".equals(mimeType) || "*/*".equals(mimeType);
-    }
-
-    private boolean hasExternalViewer(@NonNull Uri uri, @Nullable String mimeType) {
-        return !getExternalResolveInfos(createViewIntent(uri, mimeType)).isEmpty()
-                || (!"*/*".equals(mimeType) && !getExternalResolveInfos(createViewIntent(uri, "*/*")).isEmpty());
-    }
-
-    private boolean openWithExternalApp(@NonNull Uri uri, @Nullable String mimeType) {
-        if (tryOpenWithExternalApp(uri, mimeType)) {
-            return true;
-        }
-        if (!"*/*".equals(mimeType)) {
-            return tryOpenWithExternalApp(uri, "*/*");
-        }
-        return false;
-    }
-
-    private boolean tryOpenWithExternalApp(@NonNull Uri uri, @Nullable String mimeType) {
-        Intent intent = createViewIntent(uri, mimeType);
-        List<ResolveInfo> resolveInfos = getExternalResolveInfos(intent);
-        AppLogger.d(TAG, "External candidates. mime=" + String.valueOf(mimeType) + ", count=" + resolveInfos.size());
-        for (ResolveInfo resolveInfo : resolveInfos) {
-            Intent explicitIntent = new Intent(intent);
-            explicitIntent.setClassName(resolveInfo.activityInfo.packageName, resolveInfo.activityInfo.name);
-            try {
-                startActivity(explicitIntent);
-                return true;
-            } catch (ActivityNotFoundException exception) {
-                AppLogger.e(TAG, "External launch failed. package=" + resolveInfo.activityInfo.packageName, exception);
-            }
-        }
-        return false;
-    }
-
-    @NonNull
-    private Intent createViewIntent(@NonNull Uri uri, @Nullable String mimeType) {
-        Intent intent = new Intent(Intent.ACTION_VIEW);
-        intent.setDataAndType(uri, mimeType == null ? "*/*" : mimeType);
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        return intent;
-    }
-
-    @NonNull
-    private List<ResolveInfo> getExternalResolveInfos(@NonNull Intent intent) {
-        PackageManager packageManager = getPackageManager();
-        List<ResolveInfo> resolveInfos = packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
-        ArrayList<ResolveInfo> externalResolveInfos = new ArrayList<>();
-        for (ResolveInfo resolveInfo : resolveInfos) {
-            if (resolveInfo.activityInfo == null) {
-                continue;
-            }
-            if (getPackageName().equals(resolveInfo.activityInfo.packageName)) {
-                continue;
-            }
-            externalResolveInfos.add(resolveInfo);
-        }
-        return externalResolveInfos;
     }
 
     @Nullable
@@ -1947,6 +1975,10 @@ public class ActivityPictureViewer extends AppCompatActivity {
         public final String filePath;
         @NonNull
         public final String openModeLabel;
+        @NonNull
+        public final String detailedTypeLabel;
+        @NonNull
+        public final String mimeType;
         public final long fileSizeBytes;
         public final long usedMemoryBytes;
         public final long maxHeapBytes;
@@ -1955,6 +1987,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
         ReaderDashboardSnapshot(@NonNull String fileName,
                                 @NonNull String filePath,
                                 @NonNull String openModeLabel,
+                                @NonNull String detailedTypeLabel,
+                                @NonNull String mimeType,
                                 long fileSizeBytes,
                                 long usedMemoryBytes,
                                 long maxHeapBytes,
@@ -1962,6 +1996,8 @@ public class ActivityPictureViewer extends AppCompatActivity {
             this.fileName = fileName;
             this.filePath = filePath;
             this.openModeLabel = openModeLabel;
+            this.detailedTypeLabel = detailedTypeLabel;
+            this.mimeType = mimeType;
             this.fileSizeBytes = fileSizeBytes;
             this.usedMemoryBytes = usedMemoryBytes;
             this.maxHeapBytes = maxHeapBytes;

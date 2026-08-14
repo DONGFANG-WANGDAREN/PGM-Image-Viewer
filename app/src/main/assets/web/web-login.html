@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Station RX Web Login</title>
+<title>Station RX File Transfer</title>
 <style>
 body{font-family:sans-serif;background:#0f172a;color:#f8fafc;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:16px;box-sizing:border-box;}
 .box{background:#1e293b;padding:32px;border-radius:12px;max-width:380px;width:100%;text-align:center;box-shadow:0 10px 25px rgba(0,0,0,0.3);}
@@ -17,11 +17,11 @@ p{color:#94a3b8;font-size:14px;margin-bottom:12px;line-height:1.5;}
 </head>
 <body>
 <div class="box">
-<h1>Station RX Web Login</h1>
-<p>在另一台设备上打开以下网址，然后用本 App 的“扫码登录”扫描页面中的二维码。</p>
+<h1>Station RX File Transfer</h1>
+<p>Open the URL below on another device, then use this app's scan flow to confirm access.</p>
 <div class="url"><strong id="loginUrl">Loading...</strong></div>
 <div id="qr"><img id="qrImage" src="" style="width:100%;height:100%;border-radius:8px;"></div>
-<div id="status">等待扫码...</div>
+<div id="status">Waiting for scan...</div>
 </div>
 <script>
 async function init(){
@@ -36,10 +36,10 @@ async function init(){
     window.sessionStorage.setItem('rrx_file_transfer_session',sessionId);
     document.getElementById('loginUrl').textContent=loginUrl;
     document.getElementById('qrImage').src=qrImageUrl;
-    reportClientInfo(sessionId,'web-login');
+    reportClientInfo(sessionId,'File-Transfer');
     setInterval(function(){check(sessionId);},2000);
   }catch(e){
-    document.getElementById('status').textContent='加载失败: '+e;
+    document.getElementById('status').textContent='Failed to load: '+e;
   }
 }
 async function check(sessionId){
@@ -51,9 +51,9 @@ async function check(sessionId){
       window.location.href='/files';
       return;
     }
-    document.getElementById('status').textContent='等待扫码...';
+    document.getElementById('status').textContent='Waiting for scan...';
   }catch(e){
-    document.getElementById('status').textContent='连接错误';
+    document.getElementById('status').textContent='Connection error';
   }
 }
 function detectBrowser(){
@@ -76,7 +76,7 @@ function reportClientInfo(sessionId,page){
     params.set('screenWidth',String(window.screen&&window.screen.width?window.screen.width:0));
     params.set('screenHeight',String(window.screen&&window.screen.height?window.screen.height:0));
     params.set('userAgent',navigator.userAgent||'');
-    params.set('page',page||'web-login');
+    params.set('page',page||'File-Transfer');
     fetch('/api/web-login-client-info?'+params.toString()).catch(()=>{});
   }catch(e){}
 }

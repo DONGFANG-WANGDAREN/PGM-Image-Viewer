@@ -175,7 +175,13 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
                 android:minWidth="0dp"
-                android:text="@string/search_previous" />
+                android:minHeight="48dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:text="@string/search_previous"
+                android:textSize="16sp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/button_search_next"
@@ -183,7 +189,13 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:minWidth="0dp"
-                android:text="@string/search_next" />
+                android:minHeight="48dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:text="@string/search_next"
+                android:textSize="16sp" />
         </LinearLayout>
 
         <FrameLayout

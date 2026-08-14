@@ -112,6 +112,7 @@ public class WebSocketService extends Service {
             return;
         }
         try {
+            WebHttpRouter.clearAllSessions();
             activeDisplayHost = LanServerHelper.getDisplayHost();
             httpAuthToken = generateHttpAuthToken();
             int preferredHttpPort = AppConfig.get().getHttpPort();
@@ -141,6 +142,7 @@ public class WebSocketService extends Service {
             return;
         }
         running = false;
+        WebHttpRouter.clearAllSessions();
         stopHttpServer();
         clearRuntimePorts();
         AppLogger.i(TAG, "File transfer service stopped.");
@@ -160,7 +162,7 @@ public class WebSocketService extends Service {
         if (activeHttpPort <= 0) {
             return null;
         }
-        return LanServerHelper.buildAddress("http", activeDisplayHost, activeHttpPort);
+        return LanServerHelper.buildAddress("http", resolveCurrentDisplayHost(), activeHttpPort);
     }
 
     @Nullable
@@ -174,7 +176,7 @@ public class WebSocketService extends Service {
         if (browserAddress == null || browserAddress.isEmpty()) {
             return null;
         }
-        return browserAddress + "/web-login";
+        return browserAddress + "/File-Transfer";
     }
 
     @NonNull
@@ -192,7 +194,11 @@ public class WebSocketService extends Service {
         if (!runtimeRunning || runtimeHttpPort <= 0) {
             return null;
         }
-        return LanServerHelper.buildAddress("http", runtimeDisplayHost, runtimeHttpPort);
+        String displayHost = LanServerHelper.getDisplayHost();
+        if (displayHost == null || displayHost.trim().isEmpty()) {
+            displayHost = runtimeDisplayHost;
+        }
+        return LanServerHelper.buildAddress("http", displayHost, runtimeHttpPort);
     }
 
     public static int getRunningHttpPort() {
@@ -208,11 +214,11 @@ public class WebSocketService extends Service {
     public static String getPreferredWebLoginUrl() {
         String runningAddress = getRunningBrowserAddress();
         if (runningAddress != null && !runningAddress.isEmpty()) {
-            return runningAddress + "/web-login";
+            return runningAddress + "/File-Transfer";
         }
         String displayHost = LanServerHelper.getDisplayHost();
         int predictedHttpPort = LanServerHelper.findAvailablePort(AppConfig.get().getHttpPort());
-        return LanServerHelper.buildAddress("http", displayHost, predictedHttpPort) + "/web-login";
+        return LanServerHelper.buildAddress("http", displayHost, predictedHttpPort) + "/File-Transfer";
     }
 
     private void registerRefreshNotificationReceiver() {
@@ -317,7 +323,7 @@ public class WebSocketService extends Service {
 
     private void updateRuntimeState(boolean serverRunning) {
         runtimeRunning = serverRunning;
-        runtimeDisplayHost = activeDisplayHost;
+        runtimeDisplayHost = resolveCurrentDisplayHost();
         runtimeHttpPort = serverRunning ? activeHttpPort : -1;
     }
 
@@ -325,6 +331,16 @@ public class WebSocketService extends Service {
         activeHttpPort = -1;
         activeDisplayHost = LanServerHelper.getDisplayHost();
         updateRuntimeState(false);
+    }
+
+    @NonNull
+    private String resolveCurrentDisplayHost() {
+        String currentHost = LanServerHelper.getDisplayHost();
+        if (currentHost == null || currentHost.trim().isEmpty()) {
+            return activeDisplayHost;
+        }
+        activeDisplayHost = currentHost;
+        return currentHost;
     }
 
     private final class ReaderHttpServer extends NanoHTTPD {

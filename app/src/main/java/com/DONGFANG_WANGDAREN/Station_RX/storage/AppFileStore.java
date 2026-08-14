@@ -1,6 +1,8 @@
 package com.DONGFANG_WANGDAREN.Station_RX.storage;
 
 import android.content.Context;
+import android.os.Build;
+import android.os.Environment;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -23,6 +25,10 @@ import java.util.Locale;
 
 public final class AppFileStore {
 
+    private static final String LEGACY_LOCALIZED_LOGS_FOLDER = "日志";
+    private static final String LEGACY_LOCALIZED_HISTORY_FOLDER = "历史记录";
+    private static final String LEGACY_LOCALIZED_FILE_TRANSFER_FOLDER = "文件传输";
+
     private AppFileStore() {
     }
 
@@ -37,10 +43,12 @@ public final class AppFileStore {
             return null;
         }
         AppConfig config = AppConfig.get();
-        File logsDirectory = ensureDirectory(new File(
-                AppStoragePaths.resolveBaseDirectory(context),
-                normalizeDirectoryName(config.getLogsFolder(), "日志")
-        ));
+        File logsDirectory = resolveManagedDirectory(
+                context,
+                config.getLogsFolder(),
+                "Logs",
+                LEGACY_LOCALIZED_LOGS_FOLDER
+        );
         String dayFolderName = formatNow(config.getLogDayFolderFormat());
         File dayDirectory = ensureDirectory(new File(logsDirectory, dayFolderName));
         String baseName = normalizeFileName(formatNow(config.getLogFileNameFormat()), "Log");
@@ -91,6 +99,9 @@ public final class AppFileStore {
             historyFile = getLegacyHistoryFile(context);
         }
         if (!historyFile.exists()) {
+            historyFile = getLegacyLocalizedHistoryFile(context);
+        }
+        if (!historyFile.exists()) {
             return null;
         }
         try (InputStream inputStream = new FileInputStream(historyFile)) {
@@ -118,10 +129,12 @@ public final class AppFileStore {
      */
     @NonNull
     public static File getHistoryFile(@NonNull Context context) {
-        File historyDirectory = ensureDirectory(new File(
-                AppStoragePaths.resolveBaseDirectory(context),
-                normalizeDirectoryName(AppConfig.get().getHistoryFolder(), "历史记录")
-        ));
+        File historyDirectory = resolveManagedDirectory(
+                context,
+                AppConfig.get().getHistoryFolder(),
+                "History",
+                LEGACY_LOCALIZED_HISTORY_FOLDER
+        );
         return new File(historyDirectory, normalizeFileName(AppConfig.get().getHistoryFileName(), "History.json"));
     }
 
@@ -135,6 +148,11 @@ public final class AppFileStore {
         return new File(new File(AppStoragePaths.resolveBaseDirectory(context), "History"), "History.json");
     }
 
+    @NonNull
+    private static File getLegacyLocalizedHistoryFile(@NonNull Context context) {
+        return new File(new File(AppStoragePaths.resolveBaseDirectory(context), LEGACY_LOCALIZED_HISTORY_FOLDER), "History.json");
+    }
+
     /**
      * 获取文件传输根目录。
      * 路径范例：/storage/emulated/0/Station RX/文件传输
@@ -142,10 +160,12 @@ public final class AppFileStore {
      */
     @NonNull
     public static File getFileTransferRootDirectory(@NonNull Context context) {
-        return ensureDirectory(new File(
-                AppStoragePaths.resolveBaseDirectory(context),
-                normalizeDirectoryName(AppConfig.get().getFileTransferFolder(), "文件传输")
-        ));
+        return resolveManagedDirectory(
+                context,
+                AppConfig.get().getFileTransferFolder(),
+                "File Transfer",
+                LEGACY_LOCALIZED_FILE_TRANSFER_FOLDER
+        );
     }
 
     /**
@@ -158,6 +178,64 @@ public final class AppFileStore {
         File rootDirectory = getFileTransferRootDirectory(context);
         String dayFolderName = formatNow(AppConfig.get().getFileTransferDayFolderFormat());
         return ensureDirectory(new File(rootDirectory, dayFolderName));
+    }
+
+    /**
+     * 获取网页文件管理器的浏览根目录。
+     * 优先展示主存储根目录；如果系统未授予完整存储访问，则回退到应用自身目录。
+     */
+    @NonNull
+    @SuppressWarnings("deprecation")
+    public static File getWebFileBrowserRootDirectory(@NonNull Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()) {
+            File externalStorageRoot = Environment.getExternalStorageDirectory();
+            if (externalStorageRoot.exists() || externalStorageRoot.mkdirs()) {
+                return externalStorageRoot;
+            }
+        }
+        return AppStoragePaths.resolveBaseDirectory(context);
+    }
+
+    @NonNull
+    public static String getWebFileBrowserRootName(@NonNull Context context) {
+        File rootDirectory = getWebFileBrowserRootDirectory(context);
+        String absolutePath = rootDirectory.getAbsolutePath();
+        if ("/storage/emulated/0".equals(absolutePath) || "/sdcard".equalsIgnoreCase(absolutePath)) {
+            return "Internal Storage";
+        }
+        String name = rootDirectory.getName();
+        return name == null || name.trim().isEmpty() ? "Internal Storage" : name.trim();
+    }
+
+    /**
+     * 解析并校验网页文件管理器当前目录；为空时默认回到浏览根目录。
+     */
+    @Nullable
+    public static File resolveWebFileBrowserDirectory(@NonNull Context context, @Nullable String requestedPath) {
+        File directory;
+        if (requestedPath == null || requestedPath.trim().isEmpty()) {
+            directory = getWebFileBrowserRootDirectory(context);
+        } else {
+            directory = new File(requestedPath);
+        }
+        if (!directory.exists() || !directory.isDirectory()) {
+            return null;
+        }
+        return isUnderWebFileBrowserRoot(context, directory) ? directory : null;
+    }
+
+    /**
+     * 判断某个文件或目录是否在网页文件管理器浏览根目录下。
+     */
+    public static boolean isUnderWebFileBrowserRoot(@NonNull Context context, @NonNull File file) {
+        try {
+            String canonicalRoot = getWebFileBrowserRootDirectory(context).getCanonicalPath();
+            String canonicalFile = file.getCanonicalPath();
+            return canonicalFile.equals(canonicalRoot)
+                    || canonicalFile.startsWith(canonicalRoot + File.separator);
+        } catch (IOException exception) {
+            return false;
+        }
     }
 
     /**
@@ -277,6 +355,40 @@ public final class AppFileStore {
             directory.mkdirs();
         }
         return directory;
+    }
+
+    @NonNull
+    private static File resolveManagedDirectory(
+            @NonNull Context context,
+            @Nullable String configuredName,
+            @NonNull String fallbackName,
+            @Nullable String legacyLocalizedName
+    ) {
+        File baseDirectory = AppStoragePaths.resolveBaseDirectory(context);
+        File targetDirectory = new File(baseDirectory, normalizeDirectoryName(configuredName, fallbackName));
+        migrateLegacyDirectoryIfNeeded(baseDirectory, targetDirectory, legacyLocalizedName);
+        return ensureDirectory(targetDirectory);
+    }
+
+    private static void migrateLegacyDirectoryIfNeeded(
+            @NonNull File baseDirectory,
+            @NonNull File targetDirectory,
+            @Nullable String legacyLocalizedName
+    ) {
+        if (legacyLocalizedName == null || legacyLocalizedName.trim().isEmpty() || targetDirectory.exists()) {
+            return;
+        }
+        File legacyDirectory = new File(baseDirectory, legacyLocalizedName);
+        if (!legacyDirectory.exists() || !legacyDirectory.isDirectory()) {
+            return;
+        }
+        if (legacyDirectory.renameTo(targetDirectory)) {
+            return;
+        }
+        try {
+            Files.move(legacyDirectory.toPath(), targetDirectory.toPath());
+        } catch (IOException ignored) {
+        }
     }
 
     /**

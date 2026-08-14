@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Station RX Login</title>
+<title>Station RX File Transfer Login</title>
 <style>
 body{font-family:sans-serif;background:#0f172a;color:#f8fafc;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
 .box{background:#1e293b;padding:32px;border-radius:12px;max-width:360px;width:100%;box-shadow:0 10px 25px rgba(0,0,0,0.3);}
@@ -16,9 +16,9 @@ button{width:100%;margin-top:12px;padding:10px;border:none;border-radius:6px;bac
 </head>
 <body>
 <div class="box">
-<h1>Station RX Web Login</h1>
-<p>Please scan the QR code in the app or enter the login token.</p>
-<form method="get" action="/login">
+<h1>Station RX File Transfer</h1>
+<p>Scan with the app or enter the current access token.</p>
+<form method="get" action="/File-Transfer-login">
 <input type="text" name="token" placeholder="Token" required>
 <button type="submit">Login</button>
 </form></div>

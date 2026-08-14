@@ -3,6 +3,8 @@ package com.DONGFANG_WANGDAREN.Station_RX.websocket;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.os.BatteryManager;
 import android.os.Build;
@@ -51,10 +53,16 @@ import fi.iki.elonen.NanoHTTPD;
 public final class WebHttpRouter {
 
     private static final String TAG = "WebHttpRouter";
+    private static final String ROUTE_HOME = "/files";
+    private static final String ROUTE_FILE_TRANSFER_ENTRY = "/File-Transfer";
+    private static final String ROUTE_FILE_TRANSFER_LOGIN = "/File-Transfer-login";
+    private static final String ROUTE_LEGACY_FILE_TRANSFER_ENTRY = "/file-tra";
+    private static final String ROUTE_LEGACY_FILE_TRANSFER_LOGIN = "/file-tra-login";
+    private static final String ROUTE_LEGACY_WEB_LOGIN = "/web-login";
+    private static final String ROUTE_LEGACY_LOGIN = "/login";
     private static final String COOKIE_NAME = "rrx_token";
     private static final String WEB_AUTH_COOKIE_NAME = "rrx_web_auth";
     private static final long WEB_LOGIN_SESSION_MAX_AGE_MS = 10 * 60 * 1000;
-    private static final long WEB_LOGIN_AUTH_SESSION_MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000;
     private static final long UPLOAD_SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
@@ -76,11 +84,24 @@ public final class WebHttpRouter {
             uri = "/";
         }
         Map<String, String> params = session.getParms();
+        boolean cookieAuthenticated = isAuthenticatedByCookie(session);
+        boolean authenticated = isAuthenticated(session, params);
 
         switch (uri) {
-            case "/web-login":
+            case ROUTE_LEGACY_FILE_TRANSFER_ENTRY:
+            case ROUTE_LEGACY_WEB_LOGIN:
+                return redirect(cookieAuthenticated ? ROUTE_HOME : ROUTE_FILE_TRANSFER_ENTRY);
+            case ROUTE_FILE_TRANSFER_ENTRY:
+                if (cookieAuthenticated) {
+                    return redirect(ROUTE_HOME);
+                }
                 return serveAssetFile("web/web-login.html", "text/html; charset=utf-8");
-            case "/login":
+            case ROUTE_LEGACY_FILE_TRANSFER_LOGIN:
+            case ROUTE_LEGACY_LOGIN:
+            case ROUTE_FILE_TRANSFER_LOGIN:
+                if (cookieAuthenticated) {
+                    return redirect(ROUTE_HOME);
+                }
                 return handleLogin(params);
             case "/api/qr.png":
                 return serveQrCode(params);
@@ -98,16 +119,17 @@ public final class WebHttpRouter {
                 break;
         }
 
-        if (!isAuthenticated(session, params)) {
-            if (uri.equals("/") || uri.equals("/login")) {
-                return serveAssetFile("web/login.html", "text/html; charset=utf-8");
+        if (!authenticated) {
+            if (isApiRoute(uri)) {
+                return jsonErrorResponse("Authentication required.");
             }
-            return serveAssetFile("web/login.html", "text/html; charset=utf-8");
+            return redirect(ROUTE_FILE_TRANSFER_ENTRY);
         }
 
         switch (uri) {
             case "/":
-            case "/files":
+                return redirect(ROUTE_HOME);
+            case ROUTE_HOME:
                 return serveAssetFile("web/files.html", "text/html; charset=utf-8");
             case "/api/files":
                 return handleFileList(params);
@@ -126,7 +148,10 @@ public final class WebHttpRouter {
             case "/api/upload-finish":
                 return handleUploadFinish(session);
             default:
-                return newFixedLengthResponse(NanoHTTPD.Response.Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "Not found");
+                if (isApiRoute(uri)) {
+                    return newFixedLengthResponse(NanoHTTPD.Response.Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "Not found");
+                }
+                return redirect(ROUTE_HOME);
         }
     }
 
@@ -134,8 +159,7 @@ public final class WebHttpRouter {
     private NanoHTTPD.Response handleLogin(@NonNull Map<String, String> params) {
         String token = params.get("token");
         if (token != null && token.equals(service.getHttpAuthToken())) {
-            NanoHTTPD.Response response = newFixedLengthResponse(NanoHTTPD.Response.Status.REDIRECT, NanoHTTPD.MIME_PLAINTEXT, "");
-            response.addHeader("Location", "/files");
+            NanoHTTPD.Response response = redirect(ROUTE_HOME);
             response.addHeader("Set-Cookie", COOKIE_NAME + "=" + token + "; Path=/; Max-Age=604800");
             return response;
         }
@@ -177,7 +201,7 @@ public final class WebHttpRouter {
         WebLoginSession webSession = sessionId != null ? WEB_LOGIN_SESSIONS.get(sessionId) : null;
         if (webSession != null) {
             webSession.lastSeenAt = System.currentTimeMillis();
-            webSession.currentPage = "web-login";
+            webSession.currentPage = "File-Transfer";
         }
         boolean authenticated = webSession != null && webSession.authenticated;
         JSONObject result = new JSONObject();
@@ -232,11 +256,16 @@ public final class WebHttpRouter {
     }
 
     private boolean isAuthenticated(@NonNull NanoHTTPD.IHTTPSession session, @NonNull Map<String, String> params) {
-        String token = service.getHttpAuthToken();
-        String queryToken = params.get("token");
-        if (!token.isEmpty() && token.equals(queryToken)) {
+        if (isAuthenticatedByCookie(session)) {
             return true;
         }
+        String token = service.getHttpAuthToken();
+        String queryToken = params.get("token");
+        return !token.isEmpty() && token.equals(queryToken);
+    }
+
+    private boolean isAuthenticatedByCookie(@NonNull NanoHTTPD.IHTTPSession session) {
+        String token = service.getHttpAuthToken();
         String cookieToken = getCookieValue(session, COOKIE_NAME);
         if (!token.isEmpty() && token.equals(cookieToken)) {
             return true;
@@ -328,12 +357,26 @@ public final class WebHttpRouter {
         Iterator<Map.Entry<String, WebLoginSession>> iterator = WEB_LOGIN_SESSIONS.entrySet().iterator();
         while (iterator.hasNext()) {
             WebLoginSession session = iterator.next().getValue();
-            long ttl = session.authenticated ? WEB_LOGIN_AUTH_SESSION_MAX_AGE_MS : WEB_LOGIN_SESSION_MAX_AGE_MS;
             long baseTime = session.lastSeenAt > 0 ? session.lastSeenAt : session.createdAt;
-            if (now - baseTime > ttl) {
+            if (!session.authenticated && now - baseTime > WEB_LOGIN_SESSION_MAX_AGE_MS) {
                 iterator.remove();
             }
         }
+    }
+
+    public static void clearAllSessions() {
+        WEB_LOGIN_SESSIONS.clear();
+    }
+
+    private boolean isApiRoute(@NonNull String uri) {
+        return uri.startsWith("/api/");
+    }
+
+    @NonNull
+    private NanoHTTPD.Response redirect(@NonNull String location) {
+        NanoHTTPD.Response response = newFixedLengthResponse(NanoHTTPD.Response.Status.REDIRECT, NanoHTTPD.MIME_PLAINTEXT, "");
+        response.addHeader("Location", location);
+        return response;
     }
 
     private void cleanupExpiredWebLoginSessions() {
@@ -453,24 +496,40 @@ public final class WebHttpRouter {
 
     @Nullable
     public static FileTransferClientSnapshot getLatestFileTransferClientSnapshot() {
-        cleanupExpiredStaticWebLoginSessions();
-        WebLoginSession latestSession = null;
-        for (WebLoginSession session : WEB_LOGIN_SESSIONS.values()) {
-            if (latestSession == null) {
-                latestSession = session;
-                continue;
-            }
-            if (session.authenticated && !latestSession.authenticated) {
-                latestSession = session;
-                continue;
-            }
-            long currentRank = session.lastSeenAt > 0 ? session.lastSeenAt : session.createdAt;
-            long bestRank = latestSession.lastSeenAt > 0 ? latestSession.lastSeenAt : latestSession.createdAt;
-            if (session.authenticated == latestSession.authenticated && currentRank > bestRank) {
-                latestSession = session;
-            }
+        List<FileTransferClientSnapshot> snapshots = getFileTransferClientSnapshots();
+        return snapshots.isEmpty() ? null : snapshots.get(0);
+    }
+
+    @Nullable
+    public static FileTransferClientSnapshot getFileTransferClientSnapshot(@Nullable String sessionId) {
+        if (sessionId == null || sessionId.trim().isEmpty()) {
+            return null;
         }
-        return latestSession == null ? null : new FileTransferClientSnapshot(latestSession);
+        cleanupExpiredStaticWebLoginSessions();
+        WebLoginSession session = WEB_LOGIN_SESSIONS.get(sessionId.trim());
+        return session == null ? null : new FileTransferClientSnapshot(session);
+    }
+
+    @NonNull
+    public static List<FileTransferClientSnapshot> getFileTransferClientSnapshots() {
+        cleanupExpiredStaticWebLoginSessions();
+        List<WebLoginSession> sessions = new ArrayList<>(WEB_LOGIN_SESSIONS.values());
+        Collections.sort(sessions, new Comparator<WebLoginSession>() {
+            @Override
+            public int compare(WebLoginSession first, WebLoginSession second) {
+                if (first.authenticated != second.authenticated) {
+                    return first.authenticated ? -1 : 1;
+                }
+                long firstRank = first.lastSeenAt > 0 ? first.lastSeenAt : first.createdAt;
+                long secondRank = second.lastSeenAt > 0 ? second.lastSeenAt : second.createdAt;
+                return Long.compare(secondRank, firstRank);
+            }
+        });
+        List<FileTransferClientSnapshot> snapshots = new ArrayList<>();
+        for (WebLoginSession session : sessions) {
+            snapshots.add(new FileTransferClientSnapshot(session));
+        }
+        return snapshots;
     }
 
     @NonNull
@@ -524,16 +583,16 @@ public final class WebHttpRouter {
 
     @NonNull
     private NanoHTTPD.Response handleFileList(@NonNull Map<String, String> params) {
-        File directory = AppFileStore.resolveFileTransferDirectory(context, params.get("path"));
+        File directory = AppFileStore.resolveWebFileBrowserDirectory(context, params.get("path"));
         if (directory == null) {
             return jsonResponse(new JSONObject(), NanoHTTPD.Response.Status.NOT_FOUND);
         }
         JSONObject result = new JSONObject();
         try {
-            File rootDirectory = AppFileStore.getFileTransferRootDirectory(context);
+            File rootDirectory = AppFileStore.getWebFileBrowserRootDirectory(context);
             result.put("path", directory.getAbsolutePath());
             result.put("rootPath", rootDirectory.getAbsolutePath());
-            result.put("rootName", AppConfig.get().getFileTransferFolder());
+            result.put("rootName", AppFileStore.getWebFileBrowserRootName(context));
             String parent = directory.getParent();
             if (parent != null && parent.equals(rootDirectory.getAbsolutePath())) {
                 result.put("parent", parent);
@@ -622,7 +681,7 @@ public final class WebHttpRouter {
             return newFixedLengthResponse(NanoHTTPD.Response.Status.BAD_REQUEST, NanoHTTPD.MIME_PLAINTEXT, "Failed to parse upload.");
         }
         Map<String, String> params = session.getParms();
-        File directory = AppFileStore.resolveFileTransferDirectory(context, params.get("path"));
+        File directory = AppFileStore.resolveWebFileBrowserDirectory(context, params.get("path"));
         if (directory == null) {
             return newFixedLengthResponse(NanoHTTPD.Response.Status.FORBIDDEN, NanoHTTPD.MIME_PLAINTEXT, "Invalid directory.");
         }
@@ -652,7 +711,7 @@ public final class WebHttpRouter {
         if (uploadId == null || uploadId.isEmpty() || fileName == null || fileName.isEmpty()) {
             return jsonErrorResponse("Missing upload id or file name.");
         }
-        File directory = AppFileStore.resolveFileTransferDirectory(context, path);
+        File directory = AppFileStore.resolveWebFileBrowserDirectory(context, path);
         if (directory == null) {
             return jsonErrorResponse("Invalid directory.");
         }
@@ -771,7 +830,7 @@ public final class WebHttpRouter {
             return null;
         }
         File file = new File(path);
-        if (!file.exists() || !AppFileStore.isUnderFileTransferRoot(context, file)) {
+        if (!file.exists() || !AppFileStore.isUnderWebFileBrowserRoot(context, file)) {
             return null;
         }
         return file;
@@ -786,7 +845,8 @@ public final class WebHttpRouter {
     private JSONObject buildDeviceInfo() {
         JSONObject info = new JSONObject();
         try {
-            info.put("appName", AppStoragePaths.resolveBaseDirectory(context).getName());
+            File baseDirectory = AppStoragePaths.resolveBaseDirectory(context);
+            info.put("appName", baseDirectory.getName());
             info.put("packageName", context.getPackageName());
             info.put("model", Build.MODEL);
             info.put("manufacturer", Build.MANUFACTURER);
@@ -806,6 +866,20 @@ public final class WebHttpRouter {
             info.put("type", Build.TYPE);
             info.put("user", Build.USER);
             info.put("time", Build.TIME);
+            info.put("baseDirectory", baseDirectory.getAbsolutePath());
+            info.put("webRootDirectory", AppFileStore.getWebFileBrowserRootDirectory(context).getAbsolutePath());
+
+            JSONObject app = new JSONObject();
+            CharSequence applicationLabel = context.getApplicationInfo().loadLabel(context.getPackageManager());
+            app.put("label", applicationLabel == null ? "" : applicationLabel.toString());
+            PackageInfo packageInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            app.put("versionName", packageInfo.versionName != null ? packageInfo.versionName : "");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                app.put("versionCode", packageInfo.getLongVersionCode());
+            } else {
+                app.put("versionCode", packageInfo.versionCode);
+            }
+            info.put("app", app);
 
             WindowManager windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
             if (windowManager != null) {
@@ -853,10 +927,55 @@ public final class WebHttpRouter {
             network.put("wifiSignalLevel", NetworkInfoHelper.getWifiSignalLevel(context));
             network.put("estimatedDistanceMeters", NetworkInfoHelper.estimateWifiDistanceMeters(context));
             info.put("network", network);
+
+            List<FileTransferClientSnapshot> clients = getFileTransferClientSnapshots();
+            JSONArray clientArray = new JSONArray();
+            int connectedCount = 0;
+            int pendingCount = 0;
+            for (FileTransferClientSnapshot client : clients) {
+                if (client.authenticated) {
+                    connectedCount++;
+                } else {
+                    pendingCount++;
+                }
+                clientArray.put(buildClientJson(client));
+            }
+            JSONObject serviceInfo = new JSONObject();
+            serviceInfo.put("httpAddress", service.getHttpAddress() != null ? service.getHttpAddress() : "");
+            serviceInfo.put("fileTransferUrl", service.getWebLoginUrl() != null ? service.getWebLoginUrl() : "");
+            serviceInfo.put("httpPort", service.getHttpPort());
+            serviceInfo.put("connectedClients", connectedCount);
+            serviceInfo.put("pendingClients", pendingCount);
+            serviceInfo.put("totalClients", clients.size());
+            info.put("service", serviceInfo);
+            info.put("clients", clientArray);
         } catch (JSONException exception) {
             AppLogger.e(TAG, "Failed to build device info JSON.", exception);
+        } catch (PackageManager.NameNotFoundException exception) {
+            AppLogger.e(TAG, "Failed to read package info.", exception);
         }
         return info;
+    }
+
+    @NonNull
+    private JSONObject buildClientJson(@NonNull FileTransferClientSnapshot client) throws JSONException {
+        JSONObject json = new JSONObject();
+        json.put("sessionId", client.sessionId);
+        json.put("authenticated", client.authenticated);
+        json.put("qrReady", client.qrReady);
+        json.put("createdAt", client.createdAt);
+        json.put("authenticatedAt", client.authenticatedAt);
+        json.put("lastSeenAt", client.lastSeenAt);
+        json.put("remoteAddress", client.remoteAddress);
+        json.put("browserName", client.browserName);
+        json.put("platform", client.platform);
+        json.put("language", client.language);
+        json.put("timezone", client.timezone);
+        json.put("userAgent", client.userAgent);
+        json.put("currentPage", client.currentPage);
+        json.put("screenWidth", client.screenWidth);
+        json.put("screenHeight", client.screenHeight);
+        return json;
     }
 
     @NonNull
@@ -1072,6 +1191,8 @@ public final class WebHttpRouter {
     }
 
     public static final class FileTransferClientSnapshot {
+        @NonNull
+        public final String sessionId;
         public final boolean authenticated;
         public final boolean qrReady;
         public final long createdAt;
@@ -1095,6 +1216,7 @@ public final class WebHttpRouter {
         public final int screenHeight;
 
         FileTransferClientSnapshot(@NonNull WebLoginSession session) {
+            this.sessionId = session.sessionId;
             this.authenticated = session.authenticated;
             this.qrReady = session.qrReady;
             this.createdAt = session.createdAt;

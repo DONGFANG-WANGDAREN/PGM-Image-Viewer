@@ -37,6 +37,7 @@ public final class AppConfig {
 
     private final int textPreviewInitialCharacters;
     private final int largeTextInteractionThreshold;
+    private final long maxTextDisplayBytes;
     private final int maxHistoryRecords;
     private final float defaultTextSizeSp;
     private final float minTextSizeSp;
@@ -48,9 +49,9 @@ public final class AppConfig {
             storage = new JSONObject();
         }
         this.appFolderName = storage.optString("appFolderName", "Station RX");
-        this.logsFolder = storage.optString("logsFolder", "日志");
-        this.historyFolder = storage.optString("historyFolder", "历史记录");
-        this.fileTransferFolder = storage.optString("fileTransferFolder", "文件传输");
+        this.logsFolder = storage.optString("logsFolder", "Logs");
+        this.historyFolder = storage.optString("historyFolder", "History");
+        this.fileTransferFolder = storage.optString("fileTransferFolder", "File Transfer");
 
         JSONObject naming = config.optJSONObject("naming");
         if (naming == null) {
@@ -74,6 +75,7 @@ public final class AppConfig {
         }
         this.textPreviewInitialCharacters = viewer.optInt("textPreviewInitialCharacters", 24 * 1024);
         this.largeTextInteractionThreshold = viewer.optInt("largeTextInteractionThreshold", 512 * 1024);
+        this.maxTextDisplayBytes = viewer.optLong("maxTextDisplayBytes", 8L * 1024L * 1024L);
         this.maxHistoryRecords = viewer.optInt("maxHistoryRecords", 20);
         this.defaultTextSizeSp = (float) viewer.optDouble("defaultTextSizeSp", 14.0);
         this.minTextSizeSp = (float) viewer.optDouble("minTextSizeSp", 10.0);
@@ -180,6 +182,10 @@ public final class AppConfig {
 
     public int getLargeTextInteractionThreshold() {
         return largeTextInteractionThreshold;
+    }
+
+    public long getMaxTextDisplayBytes() {
+        return maxTextDisplayBytes;
     }
 
     public int getMaxHistoryRecords() {

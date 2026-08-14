@@ -77,6 +77,8 @@ public class ActivityTools extends AppCompatActivity {
 
         MaterialToolbar toolbar = findViewById(R.id.toolbar_tools);
         toolbar.setNavigationOnClickListener(view -> finish());
+        View aboutHeader = findViewById(R.id.card_about_app);
+        aboutHeader.setOnClickListener(view -> openAboutApp());
 
         RecyclerView recyclerView = findViewById(R.id.recycler_view_tools);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
@@ -91,6 +93,11 @@ public class ActivityTools extends AppCompatActivity {
         if (getIntent().getBooleanExtra(EXTRA_OPEN_SCAN_LOGIN, false)) {
             recyclerView.post(this::openScanLogin);
         }
+    }
+
+    private void openAboutApp() {
+        AppLogger.i(TAG, "Open about app page.");
+        startActivity(new Intent(this, ActivityAboutApp.class));
     }
 
     private void openDashboard() {

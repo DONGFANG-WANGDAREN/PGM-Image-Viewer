@@ -1,9 +1,9 @@
 {
   "storage": {
     "appFolderName": "Station RX",
-    "logsFolder": "日志",
-    "historyFolder": "历史记录",
-    "fileTransferFolder": "文件传输"
+    "logsFolder": "Logs",
+    "historyFolder": "History",
+    "fileTransferFolder": "File Transfer"
   },
   "naming": {
     "logDayFolderFormat": "yyyy-MM-dd",
@@ -18,6 +18,7 @@
   "viewer": {
     "textPreviewInitialCharacters": 24576,
     "largeTextInteractionThreshold": 524288,
+    "maxTextDisplayBytes": 8388608,
     "maxHistoryRecords": 20,
     "defaultTextSizeSp": 14.0,
     "minTextSizeSp": 10.0,

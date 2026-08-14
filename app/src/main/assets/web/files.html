@@ -15,7 +15,7 @@ body {
   display: flex;
 }
 #sidebar {
-  width: 320px;
+  width: 380px;
   min-width: 260px;
   background: #ffffff;
   border-right: 1px solid #e2e8f0;
@@ -60,6 +60,11 @@ body {
   border-radius: 12px;
   padding: 14px;
 }
+.card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 .info-row {
   display: flex;
   justify-content: space-between;
@@ -83,6 +88,39 @@ body {
 .distance-near { background: #dcfce7; color: #166534; }
 .distance-mid { background: #fef9c3; color: #854d0e; }
 .distance-far { background: #fee2e2; color: #991b1b; }
+.client-card {
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.client-card:last-child { margin-bottom: 0; }
+.client-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 10px;
+  word-break: break-word;
+}
+.client-subtitle {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: -4px;
+  margin-bottom: 10px;
+  word-break: break-word;
+}
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.status-connected { background: #dcfce7; color: #166534; }
+.status-pending { background: #fef3c7; color: #92400e; }
+.status-opened { background: #dbeafe; color: #1d4ed8; }
 #main {
   flex: 1;
   display: flex;
@@ -220,8 +258,24 @@ body {
       <div class="device-card" id="deviceContent">Loading...</div>
     </div>
     <div class="device-section">
+      <h3>System</h3>
+      <div class="device-card" id="systemContent">Loading...</div>
+    </div>
+    <div class="device-section">
+      <h3>Service</h3>
+      <div class="device-card" id="serviceContent">Loading...</div>
+    </div>
+    <div class="device-section">
       <h3>Network</h3>
       <div class="device-card" id="networkContent">Loading...</div>
+    </div>
+    <div class="device-section">
+      <h3>This Browser</h3>
+      <div class="device-card" id="currentClientContent">Loading...</div>
+    </div>
+    <div class="device-section">
+      <h3>Other Devices</h3>
+      <div class="card-stack" id="otherClientsContent"><div class="device-card">Loading...</div></div>
     </div>
   </div>
 </div>
@@ -243,17 +297,25 @@ const CHUNK_SIZE = 2 * 1024 * 1024;
 let currentPath='';
 let uploadCounter = 0;
 const fileTransferSessionId=window.sessionStorage.getItem('rrx_file_transfer_session')||'';
+let dragAndDropBound=false;
 function selectUpload(){document.getElementById('uploadInput').click();}
 function formatBytes(b){if(b<0||b==null)return '-';if(b<1024)return b+' B';if(b<1024*1024)return (b/1024).toFixed(2)+' KB';if(b<1024*1024*1024)return (b/(1024*1024)).toFixed(2)+' MB';return (b/(1024*1024*1024)).toFixed(2)+' GB';}
 function formatNumber(n){if(n==null||isNaN(n))return '-';return n.toLocaleString();}
+function formatTimestamp(ts){if(!ts||ts<=0)return '-';const d=new Date(ts);if(Number.isNaN(d.getTime()))return '-';return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');}
+function formatLastSeen(ts){if(!ts||ts<=0)return '-';const diff=Math.max(0,Date.now()-ts);if(diff<1000)return 'Just now';const s=Math.floor(diff/1000);if(s<60)return s+' sec ago';const m=Math.floor(s/60);if(m<60)return m+' min ago';const h=Math.floor(m/60);if(h<24)return h+' hr ago';return formatTimestamp(ts);}
 function distanceClass(d){if(d==null||d<0)return 'distance-far';if(d<1)return 'distance-near';if(d<5)return 'distance-mid';return 'distance-far';}
 function distanceText(d){if(d==null||d<0)return 'Unknown';if(d<1)return (d*100).toFixed(0)+' cm';if(d<1000)return d.toFixed(1)+' m';return (d/1000).toFixed(2)+' km';}
 function infoRow(label,value){return '<div class="info-row"><span class="info-label">'+escape(label)+'</span><span class="info-value">'+value+'</span></div>';}
-async function loadDevice(){try{const r=await fetch('/api/device');const d=await r.json();let html='';html+=infoRow('Model',escape(d.manufacturer+' '+d.model));html+=infoRow('Android',escape(d.androidVersion)+' (SDK '+d.sdk+')');if(d.display){html+=infoRow('Display',d.display.widthPixels+' x '+d.display.heightPixels);}if(d.memory){html+=infoRow('RAM Total',formatBytes(d.memory.totalRam));html+=infoRow('RAM Free',formatBytes(d.memory.availableRam));html+=infoRow('Storage Total',formatBytes(d.memory.totalStorage));html+=infoRow('Storage Free',formatBytes(d.memory.availableStorage));}if(d.battery){html+=infoRow('Battery',d.battery.level+'%'+(d.battery.plugged>0?' charging':''));}if(d.cpu){html+=infoRow('CPU',d.cpu.cores+' cores');}document.getElementById('deviceContent').innerHTML=html||'No data';
-let nhtml='';if(d.network){nhtml+=infoRow('Local IP',escape(d.network.localIp));nhtml+=infoRow('WiFi',d.network.wifiConnected?'Connected':'-');if(d.network.wifiConnected){nhtml+=infoRow('Link Speed',formatNumber(d.network.wifiLinkSpeedMbps)+' Mbps');nhtml+=infoRow('Signal',d.network.wifiSignalDbm+' dBm');const cls=distanceClass(d.network.estimatedDistanceMeters);const txt=distanceText(d.network.estimatedDistanceMeters);nhtml+=infoRow('Distance','<span class="distance-badge '+cls+'">'+txt+'</span>');}}document.getElementById('networkContent').innerHTML=nhtml||'No network data';}catch(e){document.getElementById('deviceContent').innerHTML='Error';document.getElementById('networkContent').innerHTML='Error';}}
+function batteryStatusText(b){if(!b)return '-';if(b.plugged>0)return 'Charging';switch(b.status){case 2:return 'Charging';case 3:return 'Discharging';case 4:return 'Not Charging';case 5:return 'Full';default:return '-';}}
+function renderClientCard(client,isCurrent){const title=((client.browserName||'Unknown Browser')+' / '+(client.platform||'Unknown Platform')).trim();const stateClass=client.authenticated?'status-connected':(client.qrReady?'status-pending':'status-opened');const stateText=client.authenticated?'Connected':(client.qrReady?'Waiting for confirmation':'Page opened');let html='<div class="client-card"><div class="client-title">'+escape(title)+'</div>';html+='<div class="client-subtitle">'+(isCurrent?'Current browser session':'Remote browser session')+'</div>';html+=infoRow('State','<span class="status-badge '+stateClass+'">'+escape(stateText)+'</span>');html+=infoRow('IP',escape(client.remoteAddress||'-'));html+=infoRow('Page',escape(client.currentPage||'-'));html+=infoRow('Language',escape(client.language||'-'));html+=infoRow('Time Zone',escape(client.timezone||'-'));html+=infoRow('Resolution',(client.screenWidth>0&&client.screenHeight>0)?escape(client.screenWidth+' x '+client.screenHeight):'-');html+=infoRow('User Agent',escape(client.userAgent||'-'));html+=infoRow('Created',escape(formatTimestamp(client.createdAt)));html+=infoRow('Confirmed',escape(formatTimestamp(client.authenticatedAt)));html+=infoRow('Last Active',escape(formatLastSeen(client.lastSeenAt)));html+=infoRow('Session ID',escape(client.sessionId||'-'));html+='</div>';return html;}
+async function loadDevice(){try{const r=await fetch('/api/device');const d=await r.json();let html='';html+=infoRow('App',escape((d.app&&d.app.label)||d.appName||'Station RX'));html+=infoRow('Version',escape(((d.app&&d.app.versionName)||'-')+' ('+((d.app&&d.app.versionCode)||'-')+')'));html+=infoRow('Model',escape((d.manufacturer||'')+' '+(d.model||'')));html+=infoRow('Brand',escape(d.brand||'-'));html+=infoRow('Device',escape(d.device||'-'));html+=infoRow('Product',escape(d.product||'-'));if(d.display){html+=infoRow('Display',escape(d.display.widthPixels+' x '+d.display.heightPixels));html+=infoRow('Density',escape((d.display.densityDpi||'-')+' dpi'));}if(d.memory){html+=infoRow('RAM Total',formatBytes(d.memory.totalRam));html+=infoRow('RAM Free',formatBytes(d.memory.availableRam));html+=infoRow('Low Memory',d.memory.lowMemory?'Yes':'No');html+=infoRow('Storage Total',formatBytes(d.memory.totalStorage));html+=infoRow('Storage Free',formatBytes(d.memory.availableStorage));}if(d.battery){html+=infoRow('Battery',escape((d.battery.level||0)+'%'));html+=infoRow('Power',escape(batteryStatusText(d.battery)));html+=infoRow('Temperature',d.battery.temperature!=null?escape(d.battery.temperature+' C'):'-');html+=infoRow('Voltage',d.battery.voltage!=null?escape(d.battery.voltage+' mV'):'-');}if(d.cpu){html+=infoRow('CPU Cores',escape((d.cpu.cores||0)+' cores'));html+=infoRow('App CPU',d.cpu.usage!=null?escape(Number(d.cpu.usage).toFixed(2)+'%'):'-');}document.getElementById('deviceContent').innerHTML=html||'No data';
+let shtml='';shtml+=infoRow('Android',escape((d.androidVersion||'-')+' (SDK '+(d.sdk||'-')+')'));shtml+=infoRow('Package',escape(d.packageName||'-'));shtml+=infoRow('Base Folder',escape(d.baseDirectory||'-'));shtml+=infoRow('Web Root',escape(d.webRootDirectory||'-'));shtml+=infoRow('Build ID',escape(d.id||'-'));shtml+=infoRow('Fingerprint',escape(d.fingerprint||'-'));shtml+=infoRow('Hardware',escape(d.hardware||'-'));shtml+=infoRow('Board',escape(d.board||'-'));shtml+=infoRow('Bootloader',escape(d.bootloader||'-'));shtml+=infoRow('Host',escape(d.host||'-'));shtml+=infoRow('Build Tags',escape(d.tags||'-'));shtml+=infoRow('Build Type',escape(d.type||'-'));shtml+=infoRow('Build User',escape(d.user||'-'));shtml+=infoRow('Build Time',escape(formatTimestamp(d.time||0)));document.getElementById('systemContent').innerHTML=shtml||'No system data';
+let vhtml='';if(d.service){vhtml+=infoRow('HTTP Address',escape(d.service.httpAddress||'-'));vhtml+=infoRow('Entry URL',escape(d.service.fileTransferUrl||'-'));vhtml+=infoRow('Port',escape(String(d.service.httpPort||'-')));vhtml+=infoRow('Connected',escape(String(d.service.connectedClients||0)));vhtml+=infoRow('Pending',escape(String(d.service.pendingClients||0)));vhtml+=infoRow('Total Sessions',escape(String(d.service.totalClients||0)));}document.getElementById('serviceContent').innerHTML=vhtml||'No service data';
+let nhtml='';if(d.network){nhtml+=infoRow('Local IP',escape(d.network.localIp||'-'));nhtml+=infoRow('HTTP Port',escape(String(d.network.httpPort||'-')));nhtml+=infoRow('Wi-Fi',d.network.wifiConnected?'Connected':'-');if(d.network.wifiConnected){nhtml+=infoRow('Link Speed',formatNumber(d.network.wifiLinkSpeedMbps)+' Mbps');nhtml+=infoRow('Signal',escape((d.network.wifiSignalDbm||'-')+' dBm'));nhtml+=infoRow('Signal Level',escape(String(d.network.wifiSignalLevel||'-')));const cls=distanceClass(d.network.estimatedDistanceMeters);const txt=distanceText(d.network.estimatedDistanceMeters);nhtml+=infoRow('Distance','<span class="distance-badge '+cls+'">'+txt+'</span>');}}document.getElementById('networkContent').innerHTML=nhtml||'No network data';
+const clients=Array.isArray(d.clients)?d.clients:[];const currentClient=clients.find(client=>client.sessionId===fileTransferSessionId)||null;const otherClients=clients.filter(client=>client.sessionId!==fileTransferSessionId);document.getElementById('currentClientContent').innerHTML=currentClient?renderClientCard(currentClient,true):'No active browser session details.';document.getElementById('otherClientsContent').innerHTML=otherClients.length?otherClients.map(client=>renderClientCard(client,false)).join(''):'<div class="device-card">No other connected devices.</div>';}catch(e){document.getElementById('deviceContent').innerHTML='Error';document.getElementById('systemContent').innerHTML='Error';document.getElementById('serviceContent').innerHTML='Error';document.getElementById('networkContent').innerHTML='Error';document.getElementById('currentClientContent').innerHTML='Error';document.getElementById('otherClientsContent').innerHTML='<div class="device-card">Error</div>';}}
 function escape(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
-function buildPathBar(path,rootPath,rootName){const safeRootPath=rootPath||'';const safeRootName=rootName||'文件传输';const normalizedPath=(path||'').replace(/\\/g,'/');const normalizedRoot=(safeRootPath||'').replace(/\\/g,'/');let html='<a href="#" onclick="loadFileList(&quot;&quot;);return false;">'+escape(safeRootName)+'</a>';let relative=normalizedPath;if(normalizedRoot && normalizedPath.startsWith(normalizedRoot)){relative=normalizedPath.slice(normalizedRoot.length);}const parts=relative.split('/').filter(Boolean);let acc=normalizedRoot;for(let p of parts){acc+='/'+p;html+='/';html+='<a href="#" onclick="loadFileList(&quot;'+escape(acc)+'&quot;);return false;">'+escape(p)+'</a>';}document.getElementById('pathBar').innerHTML=html;}
-async function loadFileList(path){currentPath=path||'';try{const r=await fetch('/api/files?path='+encodeURIComponent(currentPath));const d=await r.json();currentPath=d.path||currentPath;buildPathBar(d.path,d.rootPath,d.rootName);let html='';if(d.parent){html+='<div class="item" onclick="loadFileList(&quot;'+escape(d.parent)+'&quot;)"><span class="icon">&#8593;</span><span class="name">..</span></div>';}for(const f of d.files){if(f.directory){html+='<div class="item folder-item" draggable="true" data-path="'+escape(f.path)+'" onclick="loadFileList(&quot;'+escape(f.path)+'&quot;)"><span class="icon">&#128193;</span><span class="name">'+escape(f.name)+'</span><span class="meta">'+f.modified+'</span></div>';}else{html+='<div class="item" onclick="viewFile(&quot;'+escape(f.path)+'&quot;,&quot;'+escape(f.name)+'&quot;)"><span class="icon">&#128196;</span><span class="name">'+escape(f.name)+'<\/span><span class="meta">'+formatBytes(f.size)+' &middot; '+f.modified+'</span><span class="actions" onclick="event.stopPropagation()"><a href="#" onclick="downloadFile(&quot;'+escape(f.path)+'&quot;,&quot;'+escape(f.name)+'&quot;);return false;">Download</a></span></div>';}}document.getElementById('listCard').innerHTML=html||'<div class="empty">Empty folder</div>';setupDragAndDrop();}catch(e){document.getElementById('listCard').innerHTML='<div class="empty">Error loading files.</div>';}}
+function buildPathBar(path,rootPath,rootName){const safeRootPath=rootPath||'';const safeRootName=rootName||'File Transfer';const normalizedPath=(path||'').replace(/\\/g,'/');const normalizedRoot=(safeRootPath||'').replace(/\\/g,'/');let html='<a href="#" onclick="loadFileList(&quot;&quot;);return false;">'+escape(safeRootName)+'</a>';let relative=normalizedPath;if(normalizedRoot && normalizedPath.startsWith(normalizedRoot)){relative=normalizedPath.slice(normalizedRoot.length);}const parts=relative.split('/').filter(Boolean);let acc=normalizedRoot;for(let p of parts){acc+='/'+p;html+='/';html+='<a href="#" onclick="loadFileList(&quot;'+escape(acc)+'&quot;);return false;">'+escape(p)+'</a>';}document.getElementById('pathBar').innerHTML=html;}
+async function loadFileList(path){currentPath=path||'';try{const r=await fetch('/api/files?path='+encodeURIComponent(currentPath));const d=await r.json();currentPath=d.path||currentPath;buildPathBar(d.path,d.rootPath,d.rootName);let html='';if(d.parent){html+='<div class="item" onclick="loadFileList(&quot;'+escape(d.parent)+'&quot;)"><span class="icon">&#8593;</span><span class="name">..</span></div>';}for(const f of d.files){if(f.directory){html+='<div class="item folder-item" data-path="'+escape(f.path)+'" onclick="loadFileList(&quot;'+escape(f.path)+'&quot;)"><span class="icon">&#128193;</span><span class="name">'+escape(f.name)+'</span><span class="meta">'+f.modified+'</span></div>';}else{html+='<div class="item" onclick="viewFile(&quot;'+escape(f.path)+'&quot;,&quot;'+escape(f.name)+'&quot;)"><span class="icon">&#128196;</span><span class="name">'+escape(f.name)+'<\/span><span class="meta">'+formatBytes(f.size)+' &middot; '+f.modified+'</span><span class="actions" onclick="event.stopPropagation()"><a href="#" onclick="downloadFile(&quot;'+escape(f.path)+'&quot;,&quot;'+escape(f.name)+'&quot;);return false;">Download</a></span></div>';}}document.getElementById('listCard').innerHTML=html||'<div class="empty">Empty folder</div>';setupDragAndDrop();}catch(e){document.getElementById('listCard').innerHTML='<div class="empty">Error loading files.</div>';}}
 function createTransfer(name,total){const id='transfer-'+(++uploadCounter);const el=document.createElement('div');el.className='transfer';el.id=id;el.innerHTML='<div class="transfer-header"><span class="transfer-name">'+escape(name)+'</span><span class="transfer-meta" id="'+id+'-meta">0%</span></div><div class="progress-track"><div class="progress-fill" id="'+id+'-bar"></div></div>';document.getElementById('transfers').appendChild(el);return {id,total,loaded:0,setProgress(loaded){this.loaded=loaded;const pct=this.total?Math.min(100,(loaded/this.total)*100).toFixed(1):0;document.getElementById(id+'-bar').style.width=pct+'%';document.getElementById(id+'-meta').textContent=formatBytes(loaded)+(this.total?' / '+formatBytes(this.total)+' ('+pct+'%)':' / '+formatBytes(loaded));},finish(msg){document.getElementById(id+'-bar').style.width='100%';document.getElementById(id+'-meta').textContent=msg||'Done';setTimeout(()=>el.remove(),4000);},error(msg){document.getElementById(id+'-bar').style.background='#ef4444';document.getElementById(id+'-meta').textContent=msg||'Failed';}}};
 async function doUpload(){const input=document.getElementById('uploadInput');if(!input.files.length)return;await uploadFile(input.files[0],currentPath);input.value='';}
 async function uploadFile(file,targetPath){const transfer=createTransfer(file.name,file.size);const uploadId=generateId();try{const initRes=await fetch('/api/upload-init?path='+encodeURIComponent(targetPath)+'&name='+encodeURIComponent(file.name)+'&id='+uploadId);const init=await initRes.json();if(!init.success)throw new Error(init.error||'init failed');const totalChunks=Math.ceil(file.size/CHUNK_SIZE);for(let i=0;i<totalChunks;i++){const start=i*CHUNK_SIZE;const end=Math.min(file.size,start+CHUNK_SIZE);const chunk=file.slice(start,end);const form=new FormData();form.append('id',uploadId);form.append('index',String(i));form.append('chunk',chunk,'chunk');const r=await fetch('/api/upload-chunk',{method:'POST',body:form});const d=await r.json();if(!d.success)throw new Error(d.error||'chunk failed');transfer.setProgress(Math.min(file.size,(i+1)*CHUNK_SIZE));}const finishRes=await fetch('/api/upload-finish',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'id='+encodeURIComponent(uploadId)});const finish=await finishRes.json();if(!finish.success)throw new Error(finish.error||'finish failed');transfer.finish('Saved as '+escape(finish.name));loadFileList(currentPath);}catch(e){transfer.error('Upload error: '+e.message);}}
@@ -262,31 +324,30 @@ function detectBrowser(){const ua=(navigator.userAgent||'').toLowerCase();if(ua.
 function reportClientInfo(sessionId,page){if(!sessionId)return;try{const params=new URLSearchParams();params.set('session',sessionId);params.set('browser',detectBrowser());params.set('platform',navigator.platform||'');params.set('language',navigator.language||'');params.set('timezone',(Intl.DateTimeFormat().resolvedOptions().timeZone)||'');params.set('screenWidth',String(window.screen&&window.screen.width?window.screen.width:0));params.set('screenHeight',String(window.screen&&window.screen.height?window.screen.height:0));params.set('userAgent',navigator.userAgent||'');params.set('page',page||'files');fetch('/api/web-login-client-info?'+params.toString()).catch(()=>{});}catch(e){}}
 function pingClientSession(sessionId,page){if(!sessionId)return;fetch('/api/web-login-heartbeat?session='+encodeURIComponent(sessionId)+'&page='+encodeURIComponent(page||'files')).catch(()=>{});}
 function setupDragAndDrop(){
+  if(dragAndDropBound){return;}
+  dragAndDropBound=true;
   const listCard=document.getElementById('listCard');
   const overlay=document.getElementById('dropOverlay');
-  const folderItems=document.querySelectorAll('.folder-item');
   let dragCounter=0;
   function handleDragOver(e){e.preventDefault();e.dataTransfer.dropEffect='copy';}
   function handleDragEnter(e){e.preventDefault();dragCounter++;overlay.style.display='flex';}
-  function handleDragLeave(e){e.preventDefault();dragCounter--;if(dragCounter<=0){dragCounter=0;overlay.style.display='none';}}
-  async function handleDrop(e){e.preventDefault();dragCounter=0;overlay.style.display='none';listCard.classList.remove('drag-over');folderItems.forEach(el=>el.classList.remove('drop-target'));const files=e.dataTransfer.files;if(!files.length)return;let targetPath=currentPath;const folderEl=e.target.closest('.folder-item');if(folderEl){targetPath=folderEl.getAttribute('data-path');}for(const file of files){await uploadFile(file,targetPath);}}
+  function clearDropTargets(){document.querySelectorAll('.folder-item.drop-target').forEach(el=>el.classList.remove('drop-target'));}
+  function resolveTargetPath(target){const folderEl=target&&target.closest?target.closest('.folder-item'):null;return folderEl?folderEl.getAttribute('data-path'):currentPath;}
+  async function processDroppedFiles(fileList,targetPath){if(!fileList||!fileList.length)return;for(const file of fileList){await uploadFile(file,targetPath);}}
+  function handleDragLeave(e){e.preventDefault();dragCounter--;if(dragCounter<=0){dragCounter=0;overlay.style.display='none';listCard.classList.remove('drag-over');clearDropTargets();}}
+  async function handleDrop(e){e.preventDefault();dragCounter=0;overlay.style.display='none';listCard.classList.remove('drag-over');clearDropTargets();await processDroppedFiles(e.dataTransfer.files,resolveTargetPath(e.target));}
   document.body.addEventListener('dragenter',handleDragEnter);
   document.body.addEventListener('dragover',handleDragOver);
   document.body.addEventListener('dragleave',handleDragLeave);
   document.body.addEventListener('drop',handleDrop);
-  listCard.addEventListener('dragenter',(e)=>{e.preventDefault();e.stopPropagation();listCard.classList.add('drag-over');});
-  listCard.addEventListener('dragleave',(e)=>{e.preventDefault();e.stopPropagation();listCard.classList.remove('drag-over');});
-  listCard.addEventListener('drop',(e)=>{e.preventDefault();e.stopPropagation();listCard.classList.remove('drag-over');});
-  folderItems.forEach(el=>{
-    el.addEventListener('dragenter',(e)=>{e.preventDefault();e.stopPropagation();el.classList.add('drop-target');});
-    el.addEventListener('dragleave',(e)=>{e.preventDefault();e.stopPropagation();el.classList.remove('drop-target');});
-    el.addEventListener('drop',(e)=>{e.preventDefault();e.stopPropagation();el.classList.remove('drop-target');});
-  });
+  listCard.addEventListener('dragenter',(e)=>{e.preventDefault();listCard.classList.add('drag-over');const folderEl=e.target.closest('.folder-item');if(folderEl){folderEl.classList.add('drop-target');}});
+  listCard.addEventListener('dragover',(e)=>{e.preventDefault();listCard.classList.add('drag-over');clearDropTargets();const folderEl=e.target.closest('.folder-item');if(folderEl){folderEl.classList.add('drop-target');}});
+  listCard.addEventListener('dragleave',(e)=>{e.preventDefault();const related=e.relatedTarget;if(!related||!listCard.contains(related)){listCard.classList.remove('drag-over');clearDropTargets();}});
 }
 async function downloadFile(path,name){const transfer=createTransfer(name,0);try{const head=await fetch('/api/download?path='+encodeURIComponent(path),{method:'HEAD'});const total=parseInt(head.headers.get('Content-Length')||'0');if(total)transfer.total=total;let received=0;const response=await fetch('/api/download?path='+encodeURIComponent(path));const reader=response.body.getReader();const stream=new ReadableStream({start(controller){function push(){reader.read().then(({done,value})=>{if(done){controller.close();return;}received+=value.length;transfer.setProgress(received);controller.enqueue(value);push();}).catch(err=>{controller.error(err);});}push();}});const blob=await new Response(stream).blob();const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);transfer.finish('Downloaded '+formatBytes(received));}catch(e){transfer.error('Download error: '+e.message);}}
 async function viewFile(path,name){const lower=name.toLowerCase();const isImage=/\.(jpg|jpeg|png|gif|webp|bmp|heic|heif)$/.test(lower);const isText=/\.(txt|json|xml|md|java|kt|swift|csv|log|ini|cfg|conf|properties|gradle|css|js|ts|html|htm|yaml|yml)$/.test(lower);const content=document.getElementById('previewContent');if(isImage){content.innerHTML='<img src="/api/view?path='+encodeURIComponent(path)+'" alt="'+escape(name)+'">';}else if(isText){try{const r=await fetch('/api/view?path='+encodeURIComponent(path));const t=await r.text();content.innerHTML='<pre>'+escape(t)+'</pre>';}catch(e){content.textContent='Error reading file.';}}else{content.innerHTML='<p>Preview not available.</p><a href="#" onclick="downloadFile(&quot;'+escape(path)+'&quot;,&quot;'+escape(name)+'&quot;);return false;">Download '+escape(name)+'</a>';}document.getElementById('preview').style.display='flex';}
 function closePreview(){document.getElementById('preview').style.display='none';document.getElementById('previewContent').innerHTML='';}
-loadDevice();loadFileList();reportClientInfo(fileTransferSessionId,'files');setInterval(()=>pingClientSession(fileTransferSessionId,'files'),10000);
+loadDevice();loadFileList();reportClientInfo(fileTransferSessionId,'files');setInterval(()=>pingClientSession(fileTransferSessionId,'files'),10000);setInterval(loadDevice,5000);
 </script>
 </body>
 </html>

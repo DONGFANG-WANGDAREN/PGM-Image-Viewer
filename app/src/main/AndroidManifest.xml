@@ -22,6 +22,7 @@
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:largeHeap="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.PGMImageViewer">
@@ -226,9 +227,21 @@
             android:theme="@style/Theme.PGMImageViewer" />
 
         <activity
+            android:name=".ui.activity.ActivityFileTransferClientDetails"
+            android:exported="false"
+            android:label="@string/file_transfer_client_details_title"
+            android:theme="@style/Theme.PGMImageViewer" />
+
+        <activity
             android:name=".ui.activity.ActivityTools"
             android:exported="false"
             android:label="@string/tools_title"
+            android:theme="@style/Theme.PGMImageViewer" />
+
+        <activity
+            android:name=".ui.activity.ActivityAboutApp"
+            android:exported="false"
+            android:label="@string/about_app_title"
             android:theme="@style/Theme.PGMImageViewer" />
 
         <activity

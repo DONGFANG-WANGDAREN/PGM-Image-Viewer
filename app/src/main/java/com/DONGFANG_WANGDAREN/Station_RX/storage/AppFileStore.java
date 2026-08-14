@@ -25,8 +25,10 @@ import java.util.Locale;
 
 public final class AppFileStore {
 
+    private static final String LEGACY_ENGLISH_LOGS_FOLDER = "Logs";
     private static final String LEGACY_LOCALIZED_LOGS_FOLDER = "日志";
     private static final String LEGACY_LOCALIZED_HISTORY_FOLDER = "历史记录";
+    private static final String LEGACY_ENGLISH_FILE_TRANSFER_FOLDER = "File Transfer";
     private static final String LEGACY_LOCALIZED_FILE_TRANSFER_FOLDER = "文件传输";
 
     private AppFileStore() {
@@ -46,7 +48,8 @@ public final class AppFileStore {
         File logsDirectory = resolveManagedDirectory(
                 context,
                 config.getLogsFolder(),
-                "Logs",
+                "Log",
+                LEGACY_ENGLISH_LOGS_FOLDER,
                 LEGACY_LOCALIZED_LOGS_FOLDER
         );
         String dayFolderName = formatNow(config.getLogDayFolderFormat());
@@ -154,33 +157,6 @@ public final class AppFileStore {
     }
 
     /**
-     * 获取文件传输根目录。
-     * 路径范例：/storage/emulated/0/Station RX/文件传输
-     * 文件名范例：目录本身不直接落单文件，下面继续分日期目录
-     */
-    @NonNull
-    public static File getFileTransferRootDirectory(@NonNull Context context) {
-        return resolveManagedDirectory(
-                context,
-                AppConfig.get().getFileTransferFolder(),
-                "File Transfer",
-                LEGACY_LOCALIZED_FILE_TRANSFER_FOLDER
-        );
-    }
-
-    /**
-     * 获取今天的文件传输目录。
-     * 路径范例：/storage/emulated/0/Station RX/文件传输/2026-08-10
-     * 文件名范例：目录下的文件例如 test.pdf
-     */
-    @NonNull
-    public static File getCurrentFileTransferDirectory(@NonNull Context context) {
-        File rootDirectory = getFileTransferRootDirectory(context);
-        String dayFolderName = formatNow(AppConfig.get().getFileTransferDayFolderFormat());
-        return ensureDirectory(new File(rootDirectory, dayFolderName));
-    }
-
-    /**
      * 获取网页文件管理器的浏览根目录。
      * 优先展示主存储根目录；如果系统未授予完整存储访问，则回退到应用自身目录。
      */
@@ -230,41 +206,6 @@ public final class AppFileStore {
     public static boolean isUnderWebFileBrowserRoot(@NonNull Context context, @NonNull File file) {
         try {
             String canonicalRoot = getWebFileBrowserRootDirectory(context).getCanonicalPath();
-            String canonicalFile = file.getCanonicalPath();
-            return canonicalFile.equals(canonicalRoot)
-                    || canonicalFile.startsWith(canonicalRoot + File.separator);
-        } catch (IOException exception) {
-            return false;
-        }
-    }
-
-    /**
-     * 解析并校验文件传输目录；为空时默认回到今天的文件传输目录。
-     * 路径范例：/storage/emulated/0/Station RX/文件传输/2026-08-10
-     * 文件名范例：目录下允许保存的文件例如 demo.zip
-     */
-    @Nullable
-    public static File resolveFileTransferDirectory(@NonNull Context context, @Nullable String requestedPath) {
-        File directory;
-        if (requestedPath == null || requestedPath.trim().isEmpty()) {
-            directory = getCurrentFileTransferDirectory(context);
-        } else {
-            directory = new File(requestedPath);
-        }
-        if (!directory.exists() || !directory.isDirectory()) {
-            return null;
-        }
-        return isUnderFileTransferRoot(context, directory) ? directory : null;
-    }
-
-    /**
-     * 判断某个文件或目录是否在文件传输根目录下。
-     * 路径范例：/storage/emulated/0/Station RX/文件传输/2026-08-10/test.pdf
-     * 文件名范例：test.pdf
-     */
-    public static boolean isUnderFileTransferRoot(@NonNull Context context, @NonNull File file) {
-        try {
-            String canonicalRoot = getFileTransferRootDirectory(context).getCanonicalPath();
             String canonicalFile = file.getCanonicalPath();
             return canonicalFile.equals(canonicalRoot)
                     || canonicalFile.startsWith(canonicalRoot + File.separator);
@@ -344,6 +285,12 @@ public final class AppFileStore {
         return destination;
     }
 
+    public static void cleanupObsoleteDirectories(@NonNull Context context) {
+        File baseDirectory = AppStoragePaths.resolveBaseDirectory(context);
+        deleteDirectoryIfEmpty(new File(baseDirectory, LEGACY_ENGLISH_FILE_TRANSFER_FOLDER));
+        deleteDirectoryIfEmpty(new File(baseDirectory, LEGACY_LOCALIZED_FILE_TRANSFER_FOLDER));
+    }
+
     /**
      * 确保目录存在。
      * 路径范例：/storage/emulated/0/Station RX/文件传输/2026-08-10
@@ -362,33 +309,59 @@ public final class AppFileStore {
             @NonNull Context context,
             @Nullable String configuredName,
             @NonNull String fallbackName,
-            @Nullable String legacyLocalizedName
+            @Nullable String... legacyNames
     ) {
         File baseDirectory = AppStoragePaths.resolveBaseDirectory(context);
         File targetDirectory = new File(baseDirectory, normalizeDirectoryName(configuredName, fallbackName));
-        migrateLegacyDirectoryIfNeeded(baseDirectory, targetDirectory, legacyLocalizedName);
+        migrateLegacyDirectoryIfNeeded(baseDirectory, targetDirectory, legacyNames);
         return ensureDirectory(targetDirectory);
     }
 
     private static void migrateLegacyDirectoryIfNeeded(
             @NonNull File baseDirectory,
             @NonNull File targetDirectory,
-            @Nullable String legacyLocalizedName
+            @Nullable String... legacyNames
     ) {
-        if (legacyLocalizedName == null || legacyLocalizedName.trim().isEmpty() || targetDirectory.exists()) {
+        if (targetDirectory.exists() || legacyNames == null || legacyNames.length == 0) {
             return;
         }
-        File legacyDirectory = new File(baseDirectory, legacyLocalizedName);
-        if (!legacyDirectory.exists() || !legacyDirectory.isDirectory()) {
-            return;
+        for (String legacyName : legacyNames) {
+            if (legacyName == null || legacyName.trim().isEmpty()) {
+                continue;
+            }
+            File legacyDirectory = new File(baseDirectory, legacyName);
+            if (!legacyDirectory.exists() || !legacyDirectory.isDirectory()) {
+                continue;
+            }
+            if (legacyDirectory.renameTo(targetDirectory)) {
+                return;
+            }
+            try {
+                Files.move(legacyDirectory.toPath(), targetDirectory.toPath());
+                return;
+            } catch (IOException ignored) {
+            }
         }
-        if (legacyDirectory.renameTo(targetDirectory)) {
-            return;
+    }
+
+    private static boolean deleteDirectoryIfEmpty(@NonNull File directory) {
+        if (!directory.exists() || !directory.isDirectory()) {
+            return false;
         }
-        try {
-            Files.move(legacyDirectory.toPath(), targetDirectory.toPath());
-        } catch (IOException ignored) {
+        File[] children = directory.listFiles();
+        if (children == null) {
+            return directory.delete();
         }
+        for (File child : children) {
+            if (child.isDirectory()) {
+                if (!deleteDirectoryIfEmpty(child)) {
+                    return false;
+                }
+                continue;
+            }
+            return false;
+        }
+        return directory.delete();
     }
 
     /**

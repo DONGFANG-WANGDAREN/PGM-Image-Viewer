@@ -1,16 +1,14 @@
 {
   "storage": {
     "appFolderName": "Station RX",
-    "logsFolder": "Logs",
-    "historyFolder": "History",
-    "fileTransferFolder": "File Transfer"
+    "logsFolder": "Log",
+    "historyFolder": "History"
   },
   "naming": {
     "logDayFolderFormat": "yyyy-MM-dd",
     "logFileNameFormat": "'Log'_HH-mm_yyyy-MM-dd",
     "logFileExtension": ".txt",
-    "historyFileName": "History.json",
-    "fileTransferDayFolderFormat": "yyyy-MM-dd"
+    "historyFileName": "History.json"
   },
   "websocket": {
     "httpPort": 8081

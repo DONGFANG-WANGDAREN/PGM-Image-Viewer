@@ -4,6 +4,8 @@ import android.app.Application;
 
 import androidx.annotation.NonNull;
 
+import com.DONGFANG_WANGDAREN.Station_RX.storage.AppFileStore;
+
 public class AppPgmImageViewer extends Application {
 
     private static final String TAG = "AppPgmImageViewer";
@@ -12,6 +14,7 @@ public class AppPgmImageViewer extends Application {
     public void onCreate() {
         super.onCreate();
         AppConfig.init(this);
+        AppFileStore.cleanupObsoleteDirectories(this);
         AppLogger.init(this);
         AppLogger.i(TAG, "Application started.");
 

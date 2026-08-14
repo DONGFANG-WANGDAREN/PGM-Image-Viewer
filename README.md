@@ -1,6 +1,6 @@
 # Station RX
 
-Last updated: 2026-08-14 17:24
+Last updated: 2026-08-14 17:50
 
 `Station RX` is an Android file viewer with built-in LAN file transfer and browser access.
 
@@ -106,11 +106,7 @@ After login, the browser can use the built-in file manager to:
 - view the current browser session details directly in the sidebar
 - view other connected browser devices in the sidebar, including state, IP, page, language, time zone, resolution, user agent, and activity timestamps
 
-Uploaded files are saved to:
-
-```text
-/Station RX/File Transfer/yyyy-MM-dd/
-```
+Uploaded files are saved into the directory currently open in the web file manager. By default, that means the current internal storage view shown in the browser.
 
 When a file name already exists, the app appends `_1`, `_2`, and so on instead of overwriting the existing file.
 
@@ -156,14 +152,11 @@ The current app-managed structure is:
 
 ```text
 /Station RX/
-  Logs/
+  Log/
     yyyy-MM-dd/
       Log_HH-mm_yyyy-MM-dd.txt
   History/
     History.json
-  File Transfer/
-    yyyy-MM-dd/
-      <uploaded files>
 ```
 
 ## Configuration
@@ -175,7 +168,6 @@ That file currently defines:
 - app root folder name
 - log folder name and naming pattern
 - history folder name and file name
-- file transfer folder name and day-folder pattern
 - LAN HTTP port
 - text preview limit
 - large-text threshold

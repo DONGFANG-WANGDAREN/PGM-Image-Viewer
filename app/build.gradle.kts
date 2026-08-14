@@ -12,8 +12,8 @@ android {
         applicationId = "com.DONGFANG_WANGDAREN.Station_RX"
         minSdk = 33
         targetSdk = 36
-        versionCode = 26_0810_10_1
-        versionName = "26_0810_10_1.ICARUS"
+        versionCode = 26_0814_17_1
+        versionName = "26_0814_17_1.ICARUS"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

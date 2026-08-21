@@ -10,10 +10,10 @@ android {
 
     defaultConfig {
         applicationId = "com.DONGFANG_WANGDAREN.Station_RX"
-        minSdk = 33
+        minSdk = 31
         targetSdk = 36
-        versionCode = 26_0814_17_2
-        versionName = "26_0814_17_2.ICARUS"
+        versionCode = 26_0821_14_1
+        versionName = "26_0821_14_1.ICARUS.Android_12_Compatibility"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

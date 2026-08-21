@@ -1,8 +1,8 @@
-# Station RX
+# Station RX.Android_12_Compatibility
 
 Last updated: 2026-08-14 17:50
 
-`Station RX` is an Android file viewer with built-in LAN file transfer and browser access.
+`Station RX.Android_12_Compatibility` is an Android file viewer with built-in LAN file transfer and browser access.
 
 The project has already removed all chat-related and Rust-related features. The current product is focused on two core areas:
 
@@ -151,7 +151,7 @@ The built-in web routes are:
 The current app-managed structure is:
 
 ```text
-/Station RX/
+/Station RX.Android_12_Compatibility/
   Log/
     yyyy-MM-dd/
       Log_HH-mm_yyyy-MM-dd.txt

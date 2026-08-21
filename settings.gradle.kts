@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Station RX"
+rootProject.name = "Station RX.Android_12_Compatibility"
 include(":app")

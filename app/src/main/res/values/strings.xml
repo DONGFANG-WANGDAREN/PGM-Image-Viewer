@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Station RX</string>
+    <string name="app_name">Station RX.Android_12_Compatibility</string>
     <string name="open_supported_file">Open File</string>
     <string name="empty_state_title">No File Opened Yet</string>
     <string name="empty_state_message">Select a local file to view.</string>
@@ -221,6 +221,6 @@
     <string name="service_scan_login">File Transfer Access</string>
     <string name="service_status_running">Running</string>
     <string name="service_status_stopped">Stopped</string>
-    <string name="services_notification_title">Station RX file transfer is running</string>
+    <string name="services_notification_title">Station RX.Android_12_Compatibility file transfer is running</string>
     <string name="services_notification_text">File transfer service is active.</string>
 </resources>

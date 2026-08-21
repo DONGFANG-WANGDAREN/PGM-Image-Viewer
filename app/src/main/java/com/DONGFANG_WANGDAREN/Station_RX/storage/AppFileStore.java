@@ -8,6 +8,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.DONGFANG_WANGDAREN.Station_RX.app.AppConfig;
+import com.DONGFANG_WANGDAREN.Station_RX.reader.ReaderTextPlain;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -36,7 +37,7 @@ public final class AppFileStore {
 
     /**
      * 创建当前会话日志文件。
-     * 路径范例：/storage/emulated/0/Station RX/日志/2026-08-10/Log_14-30_2026-08-10.txt
+     * 路径范例：/storage/emulated/0/Station RX.Android_12_Compatibility/日志/2026-08-10/Log_14-30_2026-08-10.txt
      * 文件名范例：Log_14-30_2026-08-10.txt
      */
     @Nullable
@@ -69,7 +70,7 @@ public final class AppFileStore {
 
     /**
      * 追加写入一条日志。
-     * 路径范例：/storage/emulated/0/Station RX/日志/2026-08-10/Log_14-30_2026-08-10.txt
+     * 路径范例：/storage/emulated/0/Station RX.Android_12_Compatibility/日志/2026-08-10/Log_14-30_2026-08-10.txt
      * 文件名范例：Log_14-30_2026-08-10.txt
      */
     public static void appendLogLine(@NonNull File logFile, @NonNull String text) throws IOException {
@@ -82,8 +83,8 @@ public final class AppFileStore {
 
     /**
      * 迁移日志文件到新的日志位置。
-     * 路径范例：从 /storage/emulated/0/Station RX/日志/2026-08-10/Log_14-30_2026-08-10.txt
-     * 复制到 /storage/emulated/0/Station RX/日志/2026-08-10/Log_14-31_2026-08-10.txt
+     * 路径范例：从 /storage/emulated/0/Station RX.Android_12_Compatibility/日志/2026-08-10/Log_14-30_2026-08-10.txt
+     * 复制到 /storage/emulated/0/Station RX.Android_12_Compatibility/日志/2026-08-10/Log_14-31_2026-08-10.txt
      * 文件名范例：Log_14-31_2026-08-10.txt
      */
     public static void migrateLogFile(@NonNull File source, @NonNull File destination) throws IOException {
@@ -92,7 +93,7 @@ public final class AppFileStore {
 
     /**
      * 读取历史记录 JSON。
-     * 路径范例：/storage/emulated/0/Station RX/历史记录/History.json
+     * 路径范例：/storage/emulated/0/Station RX.Android_12_Compatibility/历史记录/History.json
      * 文件名范例：History.json
      */
     @Nullable
@@ -108,13 +109,13 @@ public final class AppFileStore {
             return null;
         }
         try (InputStream inputStream = new FileInputStream(historyFile)) {
-            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+            return ReaderTextPlain.readUtf8(inputStream);
         }
     }
 
     /**
      * 覆盖写入历史记录 JSON。
-     * 路径范例：/storage/emulated/0/Station RX/历史记录/History.json
+     * 路径范例：/storage/emulated/0/Station RX.Android_12_Compatibility/历史记录/History.json
      * 文件名范例：History.json
      */
     public static void writeHistoryJson(@NonNull Context context, @NonNull String historyJson) throws IOException {
@@ -127,7 +128,7 @@ public final class AppFileStore {
 
     /**
      * 获取当前历史记录文件。
-     * 路径范例：/storage/emulated/0/Station RX/历史记录/History.json
+     * 路径范例：/storage/emulated/0/Station RX.Android_12_Compatibility/历史记录/History.json
      * 文件名范例：History.json
      */
     @NonNull
@@ -143,7 +144,7 @@ public final class AppFileStore {
 
     /**
      * 获取旧版历史记录文件，给历史迁移兼容使用。
-     * 路径范例：/storage/emulated/0/Station RX/History/History.json
+     * 路径范例：/storage/emulated/0/Station RX.Android_12_Compatibility/History/History.json
      * 文件名范例：History.json
      */
     @NonNull
@@ -252,7 +253,7 @@ public final class AppFileStore {
 
     /**
      * 直接保存网页上传的文件到目标目录，并处理重名。
-     * 路径范例：/storage/emulated/0/Station RX/文件传输/2026-08-10/test.pdf
+     * 路径范例：/storage/emulated/0/Station RX.Android_12_Compatibility/文件传输/2026-08-10/test.pdf
      * 文件名范例：test.pdf；若重名则变成 test_1.pdf
      */
     @NonNull
@@ -268,7 +269,7 @@ public final class AppFileStore {
 
     /**
      * 把分片临时文件落成最终上传文件，并处理重名。
-     * 路径范例：/storage/emulated/0/Station RX/文件传输/2026-08-10/test.pdf
+     * 路径范例：/storage/emulated/0/Station RX.Android_12_Compatibility/文件传输/2026-08-10/test.pdf
      * 文件名范例：test.pdf；若重名则变成 test_1.pdf
      */
     @NonNull
@@ -293,7 +294,7 @@ public final class AppFileStore {
 
     /**
      * 确保目录存在。
-     * 路径范例：/storage/emulated/0/Station RX/文件传输/2026-08-10
+     * 路径范例：/storage/emulated/0/Station RX.Android_12_Compatibility/文件传输/2026-08-10
      * 文件名范例：目录下的文件例如 demo.zip
      */
     @NonNull
@@ -366,7 +367,7 @@ public final class AppFileStore {
 
     /**
      * 在目标目录下生成不重名的最终文件名。
-     * 路径范例：/storage/emulated/0/Station RX/文件传输/2026-08-10/test_1.pdf
+     * 路径范例：/storage/emulated/0/Station RX.Android_12_Compatibility/文件传输/2026-08-10/test_1.pdf
      * 文件名范例：test.pdf、test_1.pdf
      */
     @NonNull
@@ -387,7 +388,7 @@ public final class AppFileStore {
 
     /**
      * 从完整文件名里拆出主文件名。
-     * 路径范例：/storage/emulated/0/Station RX/文件传输/2026-08-10/test.pdf
+     * 路径范例：/storage/emulated/0/Station RX.Android_12_Compatibility/文件传输/2026-08-10/test.pdf
      * 文件名范例：输入 test.pdf，输出 test
      */
     @NonNull
@@ -402,7 +403,7 @@ public final class AppFileStore {
 
     /**
      * 从完整文件名里拆出扩展名。
-     * 路径范例：/storage/emulated/0/Station RX/文件传输/2026-08-10/test.pdf
+     * 路径范例：/storage/emulated/0/Station RX.Android_12_Compatibility/文件传输/2026-08-10/test.pdf
      * 文件名范例：输入 test.pdf，输出 .pdf
      */
     @NonNull
@@ -417,7 +418,7 @@ public final class AppFileStore {
 
     /**
      * 规范化目录名，避免目录层级被意外带进去。
-     * 路径范例：/storage/emulated/0/Station RX/历史记录
+     * 路径范例：/storage/emulated/0/Station RX.Android_12_Compatibility/历史记录
      * 文件名范例：目录名 历史记录
      */
     @NonNull
@@ -431,7 +432,7 @@ public final class AppFileStore {
 
     /**
      * 规范化文件名，避免把路径分隔符写进文件名。
-     * 路径范例：/storage/emulated/0/Station RX/日志/2026-08-10/Log_14-30_2026-08-10.txt
+     * 路径范例：/storage/emulated/0/Station RX.Android_12_Compatibility/日志/2026-08-10/Log_14-30_2026-08-10.txt
      * 文件名范例：Log_14-30_2026-08-10.txt
      */
     @NonNull
@@ -448,7 +449,7 @@ public final class AppFileStore {
 
     /**
      * 规范化扩展名，保证扩展名以点开头。
-     * 路径范例：/storage/emulated/0/Station RX/文件传输/2026-08-10/test.pdf
+     * 路径范例：/storage/emulated/0/Station RX.Android_12_Compatibility/文件传输/2026-08-10/test.pdf
      * 文件名范例：.pdf
      */
     @NonNull
@@ -465,7 +466,7 @@ public final class AppFileStore {
 
     /**
      * 按配置格式生成当前时间字符串，用于目录名或文件名。
-     * 路径范例：/storage/emulated/0/Station RX/日志/2026-08-10/Log_14-30_2026-08-10.txt
+     * 路径范例：/storage/emulated/0/Station RX.Android_12_Compatibility/日志/2026-08-10/Log_14-30_2026-08-10.txt
      * 文件名范例：2026-08-10、Log_14-30_2026-08-10
      */
     @NonNull

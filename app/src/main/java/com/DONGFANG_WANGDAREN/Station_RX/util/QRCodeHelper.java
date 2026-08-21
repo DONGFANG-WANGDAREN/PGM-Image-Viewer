@@ -2,6 +2,7 @@ package com.DONGFANG_WANGDAREN.Station_RX.util;
 
 
 import com.DONGFANG_WANGDAREN.Station_RX.app.AppLogger;
+import android.os.Build;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 
@@ -30,6 +31,9 @@ public final class QRCodeHelper {
         hints.put(EncodeHintType.MARGIN, 1);
         try {
             BitMatrix bitMatrix = writer.encode(content, BarcodeFormat.QR_CODE, size, size, hints);
+            if (isAndroid12()) {
+                return generateQrCodeForAndroid12(bitMatrix);
+            }
             int width = bitMatrix.getWidth();
             int height = bitMatrix.getHeight();
             Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
@@ -43,5 +47,26 @@ public final class QRCodeHelper {
             AppLogger.e("QRCodeHelper", "Failed to generate QR code.", exception);
             return null;
         }
+    }
+
+    @NonNull
+    private static Bitmap generateQrCodeForAndroid12(@NonNull BitMatrix bitMatrix) {
+        int width = bitMatrix.getWidth();
+        int height = bitMatrix.getHeight();
+        int[] pixels = new int[width * height];
+        for (int y = 0; y < height; y++) {
+            int rowOffset = y * width;
+            for (int x = 0; x < width; x++) {
+                pixels[rowOffset + x] = bitMatrix.get(x, y) ? Color.BLACK : Color.WHITE;
+            }
+        }
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        bitmap.setPixels(pixels, 0, width, 0, 0, width, height);
+        return bitmap;
+    }
+
+    private static boolean isAndroid12() {
+        return Build.VERSION.SDK_INT == Build.VERSION_CODES.S
+                || Build.VERSION.SDK_INT == Build.VERSION_CODES.S_V2;
     }
 }

@@ -46,7 +46,7 @@ public final class AppConfig {
         if (storage == null) {
             storage = new JSONObject();
         }
-        this.appFolderName = storage.optString("appFolderName", "Station RX");
+        this.appFolderName = storage.optString("appFolderName", "Station RX.Android_12_Compatibility");
         this.logsFolder = storage.optString("logsFolder", "Log");
         this.historyFolder = storage.optString("historyFolder", "History");
 

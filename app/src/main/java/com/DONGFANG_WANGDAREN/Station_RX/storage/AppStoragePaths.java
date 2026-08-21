@@ -64,9 +64,9 @@ public final class AppStoragePaths {
             return configName.trim().replace("/", "_");
         }
         CharSequence applicationLabel = context.getApplicationInfo().loadLabel(context.getPackageManager());
-        String normalized = applicationLabel == null ? "Station RX" : applicationLabel.toString().trim();
+        String normalized = applicationLabel == null ? "Station RX.Android_12_Compatibility" : applicationLabel.toString().trim();
         if (normalized.isEmpty()) {
-            normalized = "Station RX";
+            normalized = "Station RX.Android_12_Compatibility";
         }
         return normalized.replace("/", "_");
     }

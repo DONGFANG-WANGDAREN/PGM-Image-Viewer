@@ -17,7 +17,7 @@ local.properties
 .idea/navEditor.xml
 .idea/assetWizardSettings.xml
 
-*.apk
+
 *.aab
 *.ap_
 

@@ -1,10 +1,10 @@
 # Station RX
 
-Last updated: 2026-08-14 17:50
+Last updated: 2026-08-26 16:23
 
-`Station RX` is an Android file viewer with built-in LAN file transfer and browser access.
+`Station RX` is an Android file viewer with a built-in LAN file transfer service and browser-based file manager.
 
-The project has already removed all chat-related and Rust-related features. The current product is focused on two core areas:
+The current product is focused on two core areas:
 
 1. On-device file viewing
 2. LAN browser-based file transfer
@@ -16,14 +16,18 @@ The project has already removed all chat-related and Rust-related features. The 
 - Open files from the in-app document picker
 - Handle Android `VIEW` intents as an "Open with" target
 - Save recent files and reopen them from the history panel
-- Load large text files in two phases to keep the UI responsive
-- Skip displaying text files that exceed the size limit and show a too-large message instead
+- Open the history panel from the history button or by swiping in from the left edge
+- Open the built-in app README from **About This App**
+- Load text files in two phases to keep the UI responsive
+- Show a dedicated too-large state when text files exceed the display limit
 - Search text with highlighting and previous/next navigation
 - Switch Markdown between source view and rendered preview
-- Pretty-print JSON and XML
+- Pretty-print JSON and XML, then switch back to the original text
 - Adjust text size
+- Use the quick-scroll bar for long text files
 - Apply basic highlighting for code-like text files
 - View images in-app
+- View PGM and PMG images in-app
 - Play audio and video in-app
 - Open PDF files in-app
 - Show an in-viewer not supported message for unsupported file types
@@ -34,21 +38,23 @@ The tools screen includes a fixed top card plus two tool entries:
 
 - **About This App**: app name, version code, version name, and a button that returns to the home screen and opens the built-in README
 
-- **Dashboard**
-- **File Transfer**
+- **Dashboard**: live reader and file transfer status
+- **File Transfer**: start the local service, copy the browser URL, scan the QR code, or directly confirm the pending browser session from the phone
 
 ### Dashboard
 
 The dashboard shows two live cards:
 
-- **Reader**: current file name, path, open mode, file size, and memory usage
+- **Reader**: current file name, path, open mode, detailed file type, MIME type, file size, and memory usage
 - **File Transfer**: current file transfer URL, connected and pending client counts, and a live summary of active browser sessions
+
+Tapping the reader card opens the dedicated reader detail screen.
 
 Tapping the file transfer card opens the dedicated detail screen.
 
 ### File Transfer Details
 
-The detail page refreshes continuously and shows service status plus a live list of all browser sessions. Each session can be opened for a dedicated detail view with:
+The detail page refreshes continuously and shows service status, the current file transfer URL, connection counts, and a live list of browser sessions. Each session can be opened for a dedicated detail view with:
 
 - service status
 - current file transfer URL
@@ -76,7 +82,7 @@ Access flow:
 1. Open `http://<device-ip>:8081/File-Transfer` on another device
 2. The page creates a one-time session and shows a QR code
 3. On the phone, open **Tools -> File Transfer**
-4. Scan the QR code or confirm the pending session directly in the app
+4. Copy the URL, scan the QR code, or confirm the pending session directly in the app
 5. After confirmation, the browser is redirected to `/files`
 
 Authentication behavior:
@@ -97,10 +103,11 @@ After login, the browser can use the built-in file manager to:
 - sort folders before files
 - navigate with breadcrumbs
 - download files
-- preview images online
-- preview text files online
+- preview images in an overlay
+- preview text files in an overlay
 - upload files
 - upload large files in chunks
+- show upload and download progress cards
 - drag and drop files onto the page or a folder to upload
 - view a detailed left sidebar with phone, system, service, and network information
 - view the current browser session details directly in the sidebar
@@ -132,6 +139,7 @@ The built-in web routes are:
 
 - `/File-Transfer`: file transfer entry page
 - `/File-Transfer-login`: token-based file transfer login endpoint
+- `/api/qr.png`: generate the QR code image for the current login session
 - `/files`: file manager page
 - `/api/web-login-session`: create a web login session
 - `/api/session-status`: check whether a session has been confirmed
@@ -141,6 +149,7 @@ The built-in web routes are:
 - `/api/files`: get a directory listing
 - `/api/download`: download a file
 - `/api/view`: preview a file
+- `/api/upload`: upload a file directly
 - `/api/upload-init`: initialize chunked upload
 - `/api/upload-chunk`: upload a chunk
 - `/api/upload-finish`: finish an upload
@@ -167,31 +176,51 @@ That file currently defines:
 
 - app root folder name
 - log folder name and naming pattern
+- log file extension
 - history folder name and file name
 - LAN HTTP port
 - text preview limit
 - large-text threshold
+- max text display bytes
 - max history size
+- default text size
 - text size range
+
+## Permissions
+
+- `MANAGE_EXTERNAL_STORAGE`: required for broad file access on Android 11+
+- `CAMERA`: used only for QR-code scanning in the phone-side file transfer flow
+- `INTERNET`, `ACCESS_NETWORK_STATE`, and `ACCESS_WIFI_STATE`: used for the LAN file transfer service and network status
+- `POST_NOTIFICATIONS`: used for the foreground-service notification on supported Android versions
 
 ## Main Entry Points
 
 Key Android entry classes:
 
 - `ActivityPictureViewer`: main screen for file selection, history, and viewing
+- `ActivityReaderStats`: reader detail screen
 - `ActivityTools`: tools screen
+- `ActivityAboutApp`: app information screen
 - `ActivityWebSocketDashboard`: dashboard screen
 - `ActivityFileTransferStats`: file transfer detail screen
+- `ActivityFileTransferClientDetails`: per-connection detail screen
 - `WebSocketService`: LAN file transfer service
 - `WebHttpRouter`: HTTP routing and API handling
 
 ## Current Scope
 
 - Focused on **file viewing + LAN file transfer**
+- Includes a browser-based file manager for LAN access
 - Chat features have been removed
 - Rust-related code has been removed
 - The LAN web service uses `HTTP`, not `HTTPS`
 
-## Known Issues
+## Next Steps
 
-- Large `.txt` files above `5 MB` may fail to open and can currently cause a crash. This is a known issue and has not been fixed yet.
+- Add a license
+- Review and improve the GitHub repository page
+- Evaluate whether the app needs a dedicated icon
+- Improve permission prompts
+- Improve the reader
+- Improve file transfer
+- Improve the dashboard
